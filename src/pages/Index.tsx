@@ -2,15 +2,17 @@ import { useState, useMemo, useCallback } from 'react';
 import { MapContainer } from '@/components/map/MapContainer';
 import { Sidebar } from '@/components/map/Sidebar';
 import { 
-  companies as allCompanies, 
   countries, 
   euCountries, 
   europeanContinent, 
   intercontinentalEurope,
   Company 
 } from '@/data/companies';
+import { useCompanyStorage } from '@/hooks/useCompanyStorage';
+import { fuzzyMatch } from '@/lib/fuzzySearch';
 
 const Index = () => {
+  const { companies: allCompanies } = useCompanyStorage();
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewType, setViewType] = useState<'country' | 'europe' | 'world'>('europe');
@@ -20,15 +22,15 @@ const Index = () => {
   const filteredCompanies = useMemo(() => {
     let filtered = allCompanies;
 
-    // Filter by search query
+    // Filter by search query with fuzzy matching
     if (searchQuery) {
-      const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
         (c) =>
-          c.name.toLowerCase().includes(query) ||
-          c.category.toLowerCase().includes(query) ||
-          c.city.toLowerCase().includes(query) ||
-          c.country.toLowerCase().includes(query)
+          fuzzyMatch(c.name, searchQuery) ||
+          fuzzyMatch(c.category, searchQuery) ||
+          fuzzyMatch(c.city, searchQuery) ||
+          fuzzyMatch(c.country, searchQuery) ||
+          fuzzyMatch(c.description, searchQuery)
       );
     }
 
@@ -47,7 +49,7 @@ const Index = () => {
     }
 
     return filtered;
-  }, [searchQuery, viewType, selectedCountry, areaFilter]);
+  }, [searchQuery, viewType, selectedCountry, areaFilter, allCompanies]);
 
   const viewCenter = useMemo((): [number, number] => {
     if (viewType === 'country') {
