@@ -194,7 +194,7 @@ export const MapContainer = ({
           'text-anchor': 'top',
           'text-max-width': 10,
           'text-allow-overlap': false,
-          'text-font-family': ['TASA Orbiter Regular'],
+          'font-family': ['TASA Orbiter Regular'],
         },
         paint: {
           'text-color': '#000000',
