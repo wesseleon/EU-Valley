@@ -27,7 +27,7 @@ const createFallbackImage = (name: string): string => {
   
   // Border
   ctx.strokeStyle = 'white';
-  ctx.lineWidth = 4;
+  ctx.lineWidth = 2;
   ctx.stroke();
   
   // Text
@@ -89,7 +89,7 @@ export const MapContainer = ({
       if (!mapInstance.hasImage(imageId)) {
         // Create canvas for rounded square with border
         const canvas = document.createElement('canvas');
-        const size = 64;
+        const size = 48;
         canvas.width = size;
         canvas.height = size;
         const ctx = canvas.getContext('2d')!;
@@ -194,7 +194,7 @@ export const MapContainer = ({
           'text-anchor': 'top',
           'text-max-width': 10,
           'text-allow-overlap': false,
-          'text-font': ['TASA Orbiter Regular'],
+          'text-font-family': ['TASA Orbiter Regular'],
         },
         paint: {
           'text-color': '#000000',
