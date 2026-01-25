@@ -36,6 +36,7 @@ All colors MUST be HSL.
     --destructive-foreground: 0 0% 100%;
 
     --border: 256 1.3% 92.9%;
+    --border-width: 1px;
     --input: 256 1.3% 92.9%;
     --ring: 48 95.8159% 53.1373%;
 
@@ -69,7 +70,7 @@ All colors MUST be HSL.
 
     --sidebar: 248 0.3% 98.4%;
 
-    --font-sans: 'TASA Orbiter', Figtree, ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    --font-sans: 'TASA Orbiter', ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
     
     --font-serif: "Crimson Pro", ui-serif, Georgia, Cambria, Times New Roman, Times, serif;
 
