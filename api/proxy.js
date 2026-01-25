@@ -1,14 +1,16 @@
 export default async function handler(req, res) {
-  // Replace with your actual API key (or use environment variables)
-  const API_KEY = process.env.API_KEY;
-  const endpoint = 'https://api.example.com/data'; // Replace with your API endpoint
+  const API_KEY = process.env.PROTOMAPS_API_KEY;
+  const baseEndpoint = 'https://api.protomaps.com/...'; // No key in URL
 
   if (req.method === 'POST') {
     try {
-      const response = await fetch(endpoint, {
+      // Append the key to headers or query params securely
+      const url = new URL(baseEndpoint);
+      url.searchParams.append('key', API_KEY); // Or use headers
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(req.body),
