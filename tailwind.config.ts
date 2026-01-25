@@ -87,7 +87,7 @@ export default {
   		},
   		fontFamily: {
   			sans: [
-  				'Figtree',
+  				'TASA Orbiter',
   				'ui-sans-serif',
   				'system-ui',
   				'sans-serif',
