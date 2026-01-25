@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-const ADMIN_PASSWORD = 'euvalley2024'; // Change this to your preferred password
+const ADMIN_PASSWORD = 'Euro-Z0N3*economic!'; // Change this to your preferred password
 const STORAGE_KEY = 'eu-valley-admin-auth';
 const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
