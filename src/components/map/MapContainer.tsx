@@ -194,13 +194,14 @@ export const MapContainer = ({
           'text-anchor': 'top',
           'text-max-width': 10,
           'text-allow-overlap': false,
+          'text-font': ['TASA Orbiter Regular'],
         },
         paint: {
           'text-color': '#000000',
           'text-halo-color': '#ffffff',
           'text-halo-width': 1.5,
         },
-      });
+      })
 
       // Load all company logos
       companies.forEach(company => {
