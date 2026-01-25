@@ -11,8 +11,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { useCompanyStorage } from '@/hooks/useCompanyStorage';
 import { countries, categories } from '@/data/companies';
+import { AdminPasswordGate } from '@/components/admin/AdminPasswordGate';
 
-const Admin = () => {
+const AdminContent = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { customCompanies, addCompany, removeCompany } = useCompanyStorage();
@@ -341,6 +342,14 @@ const Admin = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+const Admin = () => {
+  return (
+    <AdminPasswordGate>
+      <AdminContent />
+    </AdminPasswordGate>
   );
 };
 

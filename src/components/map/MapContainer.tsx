@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Company } from '@/data/companies';
@@ -11,6 +11,35 @@ interface MapContainerProps {
   viewZoom: number;
 }
 
+// Generate fallback image as data URL
+const createFallbackImage = (name: string): string => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+  
+  // Background
+  const hue = Math.abs(name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % 360;
+  ctx.fillStyle = `hsl(${hue}, 60%, 50%)`;
+  ctx.beginPath();
+  ctx.roundRect(4, 4, 56, 56, 8);
+  ctx.fill();
+  
+  // Border
+  ctx.strokeStyle = 'white';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  
+  // Text
+  ctx.fillStyle = 'white';
+  ctx.font = 'bold 24px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(name.charAt(0).toUpperCase(), 32, 32);
+  
+  return canvas.toDataURL();
+};
+
 export const MapContainer = ({
   companies,
   selectedCompany,
@@ -21,7 +50,7 @@ export const MapContainer = ({
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
-  const popupRef = useRef<maplibregl.Popup | null>(null);
+  const loadedImages = useRef<Set<string>>(new Set());
 
   // Create GeoJSON from companies
   const geojsonData = useMemo(() => ({
@@ -39,9 +68,75 @@ export const MapContainer = ({
         logoUrl: company.logoUrl,
         city: company.city,
         country: company.country,
+        imageId: `logo-${company.id}`,
       },
     })),
   }), [companies]);
+
+  // Load a single company logo into the map
+  const loadCompanyLogo = useCallback((company: Company, mapInstance: maplibregl.Map) => {
+    const imageId = `logo-${company.id}`;
+    if (loadedImages.current.has(imageId) || mapInstance.hasImage(imageId)) {
+      return;
+    }
+
+    loadedImages.current.add(imageId);
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    
+    const applyImage = (imgSrc: HTMLImageElement | HTMLCanvasElement) => {
+      if (!mapInstance.hasImage(imageId)) {
+        // Create canvas for rounded square with border
+        const canvas = document.createElement('canvas');
+        const size = 64;
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d')!;
+        
+        // White background with rounded corners
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.roundRect(0, 0, size, size, 10);
+        ctx.fill();
+        
+        // Clip for logo
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(4, 4, size - 8, size - 8, 8);
+        ctx.clip();
+        
+        // Draw logo
+        ctx.drawImage(imgSrc, 4, 4, size - 8, size - 8);
+        ctx.restore();
+        
+        // Border
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(1.5, 1.5, size - 3, size - 3, 10);
+        ctx.stroke();
+        
+        mapInstance.addImage(imageId, { width: size, height: size, data: ctx.getImageData(0, 0, size, size).data });
+        
+        // Refresh source to show new image
+        const source = mapInstance.getSource('companies') as maplibregl.GeoJSONSource;
+        if (source) {
+          source.setData(geojsonData);
+        }
+      }
+    };
+    
+    img.onload = () => applyImage(img);
+    img.onerror = () => {
+      // Use fallback
+      const fallbackImg = new Image();
+      fallbackImg.onload = () => applyImage(fallbackImg);
+      fallbackImg.src = createFallbackImage(company.name);
+    };
+    
+    img.src = company.logoUrl || createFallbackImage(company.name);
+  }, [geojsonData]);
 
   // Initialize map
   useEffect(() => {
@@ -68,21 +163,21 @@ export const MapContainer = ({
         cluster: false,
       });
 
-      // Add circle layer for pins
+      // Add symbol layer for logo pins
       map.current.addLayer({
         id: 'company-pins',
-        type: 'circle',
+        type: 'symbol',
         source: 'companies',
-        paint: {
-          'circle-radius': [
+        layout: {
+          'icon-image': ['get', 'imageId'],
+          'icon-size': [
             'interpolate', ['linear'], ['zoom'],
-            2, 4,
-            8, 8,
-            14, 12
+            2, 0.4,
+            8, 0.6,
+            14, 0.8
           ],
-          'circle-color': 'hsl(220, 70%, 50%)',
-          'circle-stroke-width': 2,
-          'circle-stroke-color': 'hsl(220, 20%, 95%)',
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
         },
       });
 
@@ -95,9 +190,10 @@ export const MapContainer = ({
         layout: {
           'text-field': ['get', 'name'],
           'text-size': 11,
-          'text-offset': [0, 1.5],
+          'text-offset': [0, 2.2],
           'text-anchor': 'top',
           'text-max-width': 10,
+          'text-allow-overlap': false,
         },
         paint: {
           'text-color': 'hsl(220, 10%, 90%)',
@@ -106,18 +202,25 @@ export const MapContainer = ({
         },
       });
 
+      // Load all company logos
+      companies.forEach(company => {
+        loadCompanyLogo(company, map.current!);
+      });
+
       setMapLoaded(true);
     });
 
-    // Click handler
-    map.current.on('click', 'company-pins', (e) => {
-      if (!e.features || e.features.length === 0) return;
-      const feature = e.features[0];
-      const companyId = feature.properties?.id;
-      const company = companies.find(c => c.id === companyId);
-      if (company) {
-        onCompanySelect(company);
-      }
+    // Click handler for both layers
+    ['company-pins', 'company-labels'].forEach(layerId => {
+      map.current!.on('click', layerId, (e) => {
+        if (!e.features || e.features.length === 0) return;
+        const feature = e.features[0];
+        const companyId = feature.properties?.id;
+        const company = companies.find(c => c.id === companyId);
+        if (company) {
+          onCompanySelect(company);
+        }
+      });
     });
 
     // Hover effects
@@ -134,21 +237,26 @@ export const MapContainer = ({
     });
 
     return () => {
-      popupRef.current?.remove();
       map.current?.remove();
       map.current = null;
+      loadedImages.current.clear();
     };
   }, []);
 
-  // Update GeoJSON data when companies change
+  // Update GeoJSON data and load new logos when companies change
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
+
+    // Load logos for any new companies
+    companies.forEach(company => {
+      loadCompanyLogo(company, map.current!);
+    });
 
     const source = map.current.getSource('companies') as maplibregl.GeoJSONSource;
     if (source) {
       source.setData(geojsonData);
     }
-  }, [geojsonData, mapLoaded]);
+  }, [geojsonData, mapLoaded, companies, loadCompanyLogo]);
 
   // Fly to selected company
   useEffect(() => {
