@@ -5,10 +5,10 @@ User-agent: Bingbot
 Allow: /
 
 User-agent: Twitterbot
-Allow: /
+Disallow: /
 
 User-agent: facebookexternalhit
-Allow: /
+Disallow: /
 
 User-agent: *
 Allow: /
