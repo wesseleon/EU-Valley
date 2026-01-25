@@ -32,7 +32,7 @@ const createFallbackImage = (name: string): string => {
   
   // Text
   ctx.fillStyle = 'white';
-  ctx.font = 'bold 24px sans-serif';
+  ctx.font = 'bold 24px TASA Orbiter';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(name.charAt(0).toUpperCase(), 32, 32);
