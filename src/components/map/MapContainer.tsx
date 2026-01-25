@@ -97,7 +97,7 @@ export const MapContainer = ({
         // White background with rounded corners
         ctx.fillStyle = 'white';
         ctx.beginPath();
-        ctx.roundRect(0, 0, size, size, 10);
+        ctx.roundRect(0, 0, size, size, 5);
         ctx.fill();
         
         // Clip for logo
@@ -112,9 +112,9 @@ export const MapContainer = ({
         
         // Border
         ctx.strokeStyle = 'white';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.roundRect(1.5, 1.5, size - 3, size - 3, 10);
+        ctx.roundRect(1.5, 1.5, size - 3, size - 3, 5);
         ctx.stroke();
         
         mapInstance.addImage(imageId, { width: size, height: size, data: ctx.getImageData(0, 0, size, size).data });
@@ -196,8 +196,8 @@ export const MapContainer = ({
           'text-allow-overlap': false,
         },
         paint: {
-          'text-color': 'hsl(220, 10%, 90%)',
-          'text-halo-color': 'hsl(220, 20%, 10%)',
+          'text-color': '#000000',
+          'text-halo-color': '#ffffff',
           'text-halo-width': 1.5,
         },
       });
