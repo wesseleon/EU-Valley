@@ -139,13 +139,13 @@ export const Sidebar = ({
         {/* Socials */}
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="gap-2" asChild>
-            <a href="https://lovable.dev" target="_blank" rel="noopener noreferrer">
+            <a href="https://www.leeeon.studio/" target="_blank" rel="noopener noreferrer">
               <Globe className="w-4 h-4" />
               Website
             </a>
           </Button>
           <Button variant="outline" size="sm" className="gap-2" asChild>
-            <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer">
+            <a href="https://linkedin.com/in/wlb02/" target="_blank" rel="noopener noreferrer">
               <Linkedin className="w-4 h-4" />
               LinkedIn
             </a>
