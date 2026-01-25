@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-const ADMIN_PASSWORD = 'Euro-Z0N3*economic!'; // Change this to your preferred password
 const STORAGE_KEY = 'eu-valley-admin-auth';
 const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -19,7 +18,6 @@ export const AdminPasswordGate = ({ children }: AdminPasswordGateProps) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check if already authenticated
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {
@@ -36,18 +34,33 @@ export const AdminPasswordGate = ({ children }: AdminPasswordGateProps) => {
     setIsLoading(false);
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (password === ADMIN_PASSWORD) {
-      const session = {
-        expiry: Date.now() + SESSION_DURATION,
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-      setIsAuthenticated(true);
-    } else {
-      setError('Incorrect password');
+    try {
+      const response = await fetch('/api/admin-login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ password }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        const session = {
+          expiry: Date.now() + SESSION_DURATION,
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+        setIsAuthenticated(true);
+      } else {
+        setError('Incorrect password');
+        setPassword('');
+      }
+    } catch (err) {
+      setError('Failed to authenticate. Please try again.');
       setPassword('');
     }
   };
