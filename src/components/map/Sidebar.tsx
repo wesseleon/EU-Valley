@@ -64,7 +64,7 @@ export const Sidebar = ({
                   alt={selectedCompany.name}
                   className="w-20 h-20 object-contain"
                   onError={(e) => {
-                    e.currentTarget.src = `https://via.placeholder.com/80?text=${selectedCompany.name.charAt(0)}`;
+                    e.currentTarget.src = `https://placeholder.com/wp-content/uploads/2020/08/placeholder-80x80.png?text=${selectedCompany.name.charAt(0)}`;
                   }}
                 />
               </div>
@@ -226,7 +226,7 @@ export const Sidebar = ({
                   alt={company.name}
                   className="w-8 h-8 object-contain"
                   onError={(e) => {
-                    e.currentTarget.src = `https://via.placeholder.com/32?text=${company.name.charAt(0)}`;
+                    e.currentTarget.src = `https://placeholder.com/wp-content/uploads/2020/08/placeholder-32x32.png?text=${selectedCompany.name.charAt(0)}`;
                   }}
                 />
               </div>
