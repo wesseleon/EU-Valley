@@ -199,12 +199,12 @@ export const MapContainer = ({
           'text-anchor': 'top',
           'text-max-width': 10,
           'text-allow-overlap': false,
-          'text-font': ['Open Sans Regular'],
+          'text-font': ['Noto Sans Medium'],
         },
         paint: {
           'text-color': '#1a1a1a',
           'text-halo-color': '#ffffff',
-          'text-halo-width': 1,
+          'text-halo-width': 0.8,
         },
       })
 
