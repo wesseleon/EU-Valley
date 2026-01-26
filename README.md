@@ -1,7 +1,7 @@
 # Welcome to the EU Valley
 
 ## Project info
-EU Valley is a project aimed at fostering collaboration, innovation, and knowledge-sharing among European tech communities. The initiative seeks to create a network of developers, designers, and entrepreneurs across Europe, promoting open-source projects, cross-border partnerships, and the exchange of ideas.
+EU Valley is a project aimed creating an overview of the companies in Europe leading the innovation and helping Europe advance towards greater independence from other countries. It acts as a register of companies that contribute to this.
 
 ## Mission
 The mission of EU Valley is to:
