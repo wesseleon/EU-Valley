@@ -13,10 +13,10 @@ interface MapContainerProps {
 
 // Pin sizing constants
 const PIN_SIZE = 48; // 75% of original 64px
-const PIN_BORDER_WIDTH = 2; // Half of original 4px
+const PIN_BORDER_WIDTH = 1; // Quarter of original 4px
 const PIN_BORDER_RADIUS = 6;
 const PIN_INNER_RADIUS = 4;
-const PIN_PADDING = 3;
+const PIN_PADDING = 2;
 
 // Generate fallback image as data URL
 const createFallbackImage = (name: string): string => {
@@ -199,7 +199,7 @@ export const MapContainer = ({
           'text-anchor': 'top',
           'text-max-width': 10,
           'text-allow-overlap': false,
-          'text-font': ['Noto Sans Medium'],
+          'text-font': ['Noto Sans Bold'],
         },
         paint: {
           'text-color': '#1a1a1a',

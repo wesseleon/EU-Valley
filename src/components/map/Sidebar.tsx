@@ -46,8 +46,8 @@ export const Sidebar = ({
       <nav className="w-96 bg-card/95 backdrop-blur-lg border-r border-border flex flex-col h-full font-sans" aria-label="Company details">
         <header className="p-4 border-b border-border">
           <Button 
-            variant="secondary" 
-            className="gap-2 hover:bg-secondary/80 transition-colors"
+            variant="outline" 
+            className="gap-2 bg-background text-foreground border-border hover:bg-muted transition-colors"
             onClick={() => onCompanySelect(null)}
           >
             <ArrowLeft className="w-4 h-4" />
