@@ -27,6 +27,7 @@ const AdminContent = () => {
     street: '',
     description: '',
     website: '',
+    logoUrl: '',
     category: 'Technology',
     latitude: 0,
     longitude: 0,
@@ -105,9 +106,16 @@ const AdminContent = () => {
 
     try {
       const countryData = countries.find(c => c.code === form.country);
-      const logoUrl = form.website 
-        ? `https://logo.clearbit.com/${new URL(form.website.startsWith('http') ? form.website : `https://${form.website}`).hostname.replace('www.', '')}`
-        : '';
+      
+      // Use custom logo URL if provided, otherwise try Clearbit
+      let logoUrl = form.logoUrl.trim();
+      if (!logoUrl && form.website) {
+        try {
+          logoUrl = `https://logo.clearbit.com/${new URL(form.website.startsWith('http') ? form.website : `https://${form.website}`).hostname.replace('www.', '')}`;
+        } catch {
+          logoUrl = '';
+        }
+      }
 
       addCompany({
         name: form.name.trim(),
@@ -135,14 +143,15 @@ const AdminContent = () => {
         street: '',
         description: '',
         website: '',
+        logoUrl: '',
         category: 'Technology',
         latitude: 0,
         longitude: 0,
       });
-    } catch (error) {
+    } catch (err) {
       toast({ 
         title: 'Error', 
-        description: error instanceof Error ? error.message : 'Failed to add company',
+        description: err instanceof Error ? err.message : 'Failed to add company',
         variant: 'destructive' 
       });
     }
@@ -262,6 +271,19 @@ const AdminContent = () => {
                     onChange={(e) => handleInputChange('website', e.target.value)}
                     placeholder="e.g., example.com"
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="logoUrl">Logo URL (optional)</Label>
+                  <Input
+                    id="logoUrl"
+                    value={form.logoUrl}
+                    onChange={(e) => handleInputChange('logoUrl', e.target.value)}
+                    placeholder="e.g., https://example.com/logo.png"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave empty to auto-fetch from website
+                  </p>
                 </div>
 
                 <div className="space-y-2">
