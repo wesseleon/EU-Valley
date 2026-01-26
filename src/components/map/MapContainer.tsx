@@ -11,31 +11,38 @@ interface MapContainerProps {
   viewZoom: number;
 }
 
+// Pin sizing constants
+const PIN_SIZE = 48; // 75% of original 64px
+const PIN_BORDER_WIDTH = 2; // Half of original 4px
+const PIN_BORDER_RADIUS = 6;
+const PIN_INNER_RADIUS = 4;
+const PIN_PADDING = 3;
+
 // Generate fallback image as data URL
 const createFallbackImage = (name: string): string => {
   const canvas = document.createElement('canvas');
-  canvas.width = 64;
-  canvas.height = 64;
+  canvas.width = PIN_SIZE;
+  canvas.height = PIN_SIZE;
   const ctx = canvas.getContext('2d')!;
   
   // Background
   const hue = Math.abs(name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % 360;
   ctx.fillStyle = `hsl(${hue}, 60%, 50%)`;
   ctx.beginPath();
-  ctx.roundRect(4, 4, 56, 56, 8);
+  ctx.roundRect(PIN_PADDING, PIN_PADDING, PIN_SIZE - PIN_PADDING * 2, PIN_SIZE - PIN_PADDING * 2, PIN_INNER_RADIUS);
   ctx.fill();
   
   // Border
   ctx.strokeStyle = 'white';
-  ctx.lineWidth = 4;
+  ctx.lineWidth = PIN_BORDER_WIDTH;
   ctx.stroke();
   
   // Text
   ctx.fillStyle = 'white';
-  ctx.font = 'bold 24px TASA Orbiter';
+  ctx.font = `500 18px "TASA Orbiter", sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(name.charAt(0).toUpperCase(), 32, 32);
+  ctx.fillText(name.charAt(0).toUpperCase(), PIN_SIZE / 2, PIN_SIZE / 2);
   
   return canvas.toDataURL();
 };
@@ -87,39 +94,37 @@ export const MapContainer = ({
     
     const applyImage = (imgSrc: HTMLImageElement | HTMLCanvasElement) => {
       if (!mapInstance.hasImage(imageId)) {
-        // Create canvas for rounded square with border
         const canvas = document.createElement('canvas');
-        const size = 64;
-        canvas.width = size;
-        canvas.height = size;
+        canvas.width = PIN_SIZE;
+        canvas.height = PIN_SIZE;
         const ctx = canvas.getContext('2d')!;
         
-        // White background with rounded corners
+        // White background with rounded corners (outer)
         ctx.fillStyle = 'white';
         ctx.beginPath();
-        ctx.roundRect(0, 0, size, size, 5);
+        ctx.roundRect(0, 0, PIN_SIZE, PIN_SIZE, PIN_BORDER_RADIUS);
         ctx.fill();
         
-        // Clip for logo
+        // Clip for logo (inner, nested radius)
         ctx.save();
         ctx.beginPath();
-        ctx.roundRect(4, 4, size - 8, size - 8, 8);
+        ctx.roundRect(PIN_PADDING, PIN_PADDING, PIN_SIZE - PIN_PADDING * 2, PIN_SIZE - PIN_PADDING * 2, PIN_INNER_RADIUS);
         ctx.clip();
         
         // Draw logo
-        ctx.drawImage(imgSrc, 4, 4, size - 8, size - 8);
+        ctx.drawImage(imgSrc, PIN_PADDING, PIN_PADDING, PIN_SIZE - PIN_PADDING * 2, PIN_SIZE - PIN_PADDING * 2);
         ctx.restore();
         
         // Border
         ctx.strokeStyle = 'white';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = PIN_BORDER_WIDTH;
         ctx.beginPath();
-        ctx.roundRect(1.5, 1.5, size - 3, size - 3, 5);
+        ctx.roundRect(PIN_BORDER_WIDTH / 2, PIN_BORDER_WIDTH / 2, PIN_SIZE - PIN_BORDER_WIDTH, PIN_SIZE - PIN_BORDER_WIDTH, PIN_BORDER_RADIUS);
         ctx.stroke();
         
-        mapInstance.addImage(imageId, { width: size, height: size, data: ctx.getImageData(0, 0, size, size).data });
+        mapInstance.addImage(imageId, { width: PIN_SIZE, height: PIN_SIZE, data: ctx.getImageData(0, 0, PIN_SIZE, PIN_SIZE).data });
         
-        // Refresh source to show new image
+        // Refresh source
         const source = mapInstance.getSource('companies') as maplibregl.GeoJSONSource;
         if (source) {
           source.setData(geojsonData);
@@ -190,16 +195,16 @@ export const MapContainer = ({
         layout: {
           'text-field': ['get', 'name'],
           'text-size': 11,
-          'text-offset': [0, 2.2],
+          'text-offset': [0, 1.8],
           'text-anchor': 'top',
           'text-max-width': 10,
           'text-allow-overlap': false,
-          'text-font': ['TASA Orbiter Regular'],
+          'text-font': ['Open Sans Regular'],
         },
         paint: {
-          'text-color': '#000000',
+          'text-color': '#1a1a1a',
           'text-halo-color': '#ffffff',
-          'text-halo-width': 1.5,
+          'text-halo-width': 1,
         },
       })
 

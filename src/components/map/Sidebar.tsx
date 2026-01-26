@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo, useCallback } from 'react';
 import { Search, Globe, MapPin, ExternalLink, ArrowLeft, Linkedin, Globe2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Company, countries } from '@/data/companies';
+import { countryCodeToFlag } from '@/lib/countryFlags';
 
 interface SidebarProps {
   companies: Company[];
@@ -42,41 +43,42 @@ export const Sidebar = ({
 
   if (selectedCompany) {
     return (
-      <div className="w-96 bg-card/95 backdrop-blur-lg border-r border-border flex flex-col h-full">
-        <div className="p-4 border-b border-border">
+      <nav className="w-96 bg-card/95 backdrop-blur-lg border-r border-border flex flex-col h-full font-sans" aria-label="Company details">
+        <header className="p-4 border-b border-border">
           <Button 
-            variant="ghost" 
-            className="gap-2 text-muted-foreground hover:text-foreground"
+            variant="secondary" 
+            className="gap-2 hover:bg-secondary/80 transition-colors"
             onClick={() => onCompanySelect(null)}
           >
             <ArrowLeft className="w-4 h-4" />
             Back to list
           </Button>
-        </div>
+        </header>
         
         <ScrollArea className="flex-1">
-          <div className="p-6 space-y-6">
+          <article className="p-6 space-y-6">
             {/* Logo */}
-            <div className="flex justify-center">
+            <figure className="flex justify-center">
               <div className="w-24 h-24 bg-background rounded-xl border border-border overflow-hidden flex items-center justify-center">
                 <img 
                   src={selectedCompany.logoUrl} 
-                  alt={selectedCompany.name}
+                  alt={`${selectedCompany.name} logo`}
                   className="w-20 h-20 object-contain"
+                  loading="lazy"
                   onError={(e) => {
-                    e.currentTarget.src = `https://placeholder.com/wp-content/uploads/2020/08/placeholder-80x80.png?text=${selectedCompany.name.charAt(0)}`;
+                    e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(selectedCompany.name)}&size=80&background=random`;
                   }}
                 />
               </div>
-            </div>
+            </figure>
 
             {/* Name and Category */}
-            <div className="text-center space-y-2">
-              <h2 className="text-2xl font-bold text-foreground">{selectedCompany.name}</h2>
+            <header className="text-center space-y-2">
+              <h1 className="text-2xl font-bold text-foreground">{selectedCompany.name}</h1>
               <Badge variant="secondary" className="text-sm">
                 {selectedCompany.category}
               </Badge>
-            </div>
+            </header>
 
             {/* Description */}
             <p className="text-muted-foreground text-sm leading-relaxed">
@@ -84,36 +86,54 @@ export const Sidebar = ({
             </p>
 
             {/* Address */}
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-primary" />
+            <section className="space-y-2">
+              <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-primary" aria-hidden="true" />
                 Address
-              </h3>
-              <p className="text-sm text-muted-foreground pl-6">
+              </h2>
+              <address className="text-sm text-muted-foreground pl-6 not-italic">
                 {selectedCompany.street && `${selectedCompany.street}, `}
                 {selectedCompany.city}, {selectedCompany.country}
-              </p>
-            </div>
+              </address>
+            </section>
 
             {/* Website */}
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Globe className="w-4 h-4 text-primary" />
+            <section className="space-y-2">
+              <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Globe className="w-4 h-4 text-primary" aria-hidden="true" />
                 Website
-              </h3>
+              </h2>
               <a 
                 href={selectedCompany.website}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm text-primary hover:text-primary/80 flex items-center gap-1 pl-6 transition-colors"
+                className="text-sm text-primary hover:text-primary/80 hover:underline flex items-center gap-1 pl-6 transition-colors"
               >
                 {selectedCompany.website.replace('https://www.', '').replace('https://', '').replace(/\/$/, '')}
-                <ExternalLink className="w-3 h-3" />
+                <ExternalLink className="w-3 h-3" aria-hidden="true" />
               </a>
-            </div>
-          </div>
+            </section>
+
+            {/* Country */}
+            <section className="space-y-2">
+              <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Globe2 className="w-4 h-4 text-primary" aria-hidden="true" />
+                Country
+              </h2>
+              <div className="pl-6">
+                <div className="inline-flex items-center gap-2 px-3 py-2 bg-muted rounded-lg">
+                  <span className="text-xl" role="img" aria-label={`${selectedCompany.country} flag`}>
+                    {countryCodeToFlag(selectedCompany.countryCode)}
+                  </span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {selectedCompany.country}
+                  </span>
+                </div>
+              </div>
+            </section>
+          </article>
         </ScrollArea>
-      </div>
+      </nav>
     );
   }
 
@@ -137,20 +157,20 @@ export const Sidebar = ({
         </div>
 
         {/* Socials */}
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="gap-2" asChild>
+        <nav className="flex gap-2" aria-label="Social links">
+          <Button variant="outline" size="sm" className="gap-2 hover:bg-muted transition-colors" asChild>
             <a href="https://www.leeeon.studio/" target="_blank" rel="noopener noreferrer">
-              <Globe className="w-4 h-4" />
+              <Globe className="w-4 h-4" aria-hidden="true" />
               Website
             </a>
           </Button>
-          <Button variant="outline" size="sm" className="gap-2" asChild>
+          <Button variant="outline" size="sm" className="gap-2 hover:bg-muted transition-colors" asChild>
             <a href="https://linkedin.com/in/wlb02/" target="_blank" rel="noopener noreferrer">
-              <Linkedin className="w-4 h-4" />
+              <Linkedin className="w-4 h-4" aria-hidden="true" />
               LinkedIn
             </a>
           </Button>
-        </div>
+        </nav>
 
         {/* Search */}
         <div className="relative">
@@ -207,42 +227,48 @@ export const Sidebar = ({
 
       {/* Company List */}
       <ScrollArea className="flex-1">
-        <div className="p-2 space-y-1">
+        <ul className="p-2 space-y-1" role="list">
           {sortedCompanies.map((company) => (
-            <button
-              key={company.id}
-              onClick={() => onCompanySelect(company)}
-              onMouseEnter={() => setHoveredCompany(company.id)}
-              onMouseLeave={() => setHoveredCompany(null)}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all duration-200 text-left ${
-                hoveredCompany === company.id
-                  ? 'bg-primary/10 border-primary/20'
-                  : 'hover:bg-muted/50'
-              }`}
-            >
-              <div className="w-10 h-10 bg-background rounded-lg border border-border overflow-hidden flex items-center justify-center shrink-0">
-                <img 
-                  src={company.logoUrl} 
-                  alt={company.name}
-                  className="w-8 h-8 object-contain"
-                  onError={(e) => {
-                    e.currentTarget.src = `https://placeholder.com/wp-content/uploads/2020/08/placeholder-32x32.png?text=${selectedCompany.name.charAt(0)}`;
-                  }}
-                />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-foreground truncate">{company.name}</p>
-                <p className="text-xs text-muted-foreground truncate">{company.category}</p>
-              </div>
-            </button>
+            <li key={company.id}>
+              <button
+                onClick={() => onCompanySelect(company)}
+                onMouseEnter={() => setHoveredCompany(company.id)}
+                onMouseLeave={() => setHoveredCompany(null)}
+                className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all duration-150 text-left cursor-pointer ${
+                  hoveredCompany === company.id
+                    ? 'bg-primary/10'
+                    : 'hover:bg-muted/50'
+                }`}
+                aria-label={`View ${company.name} details`}
+              >
+                <figure className="w-10 h-10 bg-background rounded-lg border border-border overflow-hidden flex items-center justify-center shrink-0">
+                  <img 
+                    src={company.logoUrl} 
+                    alt=""
+                    className="w-8 h-8 object-contain"
+                    loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(company.name)}&size=32&background=random`;
+                    }}
+                  />
+                </figure>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-foreground truncate">{company.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{company.category}</p>
+                </div>
+                <span className="text-lg shrink-0" role="img" aria-label={`${company.country} flag`}>
+                  {countryCodeToFlag(company.countryCode)}
+                </span>
+              </button>
+            </li>
           ))}
 
           {sortedCompanies.length === 0 && (
-            <div className="p-8 text-center text-muted-foreground">
+            <li className="p-8 text-center text-muted-foreground">
               No companies found
-            </div>
+            </li>
           )}
-        </div>
+        </ul>
       </ScrollArea>
 
       {/* Footer */}
