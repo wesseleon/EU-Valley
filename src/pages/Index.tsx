@@ -10,6 +10,7 @@ import {
 } from '@/data/companies';
 import { useCompanyStorage } from '@/hooks/useCompanyStorage';
 import { fuzzyMatch } from '@/lib/fuzzySearch';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const Index = () => {
   const { companies: allCompanies } = useCompanyStorage();
@@ -18,6 +19,7 @@ const Index = () => {
   const [viewType, setViewType] = useState<'country' | 'europe' | 'world'>('europe');
   const [selectedCountry, setSelectedCountry] = useState('NL');
   const [areaFilter, setAreaFilter] = useState<'eu' | 'european-continent' | 'intercontinental' | 'all'>('all');
+  const isMobile = useIsMobile();
 
   const filteredCompanies = useMemo(() => {
     let filtered = allCompanies;
@@ -76,19 +78,23 @@ const Index = () => {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
-      <Sidebar
-        companies={filteredCompanies}
-        selectedCompany={selectedCompany}
-        onCompanySelect={handleCompanySelect}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        viewType={viewType}
-        onViewTypeChange={setViewType}
-        selectedCountry={selectedCountry}
-        onCountryChange={setSelectedCountry}
-        areaFilter={areaFilter}
-        onAreaFilterChange={setAreaFilter}
-      />
+      {/* Desktop sidebar */}
+      {!isMobile && (
+        <Sidebar
+          companies={filteredCompanies}
+          selectedCompany={selectedCompany}
+          onCompanySelect={handleCompanySelect}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          viewType={viewType}
+          onViewTypeChange={setViewType}
+          selectedCountry={selectedCountry}
+          onCountryChange={setSelectedCountry}
+          areaFilter={areaFilter}
+          onAreaFilterChange={setAreaFilter}
+        />
+      )}
+      
       <div className="flex-1 relative">
         <MapContainer
           companies={filteredCompanies}
@@ -98,6 +104,23 @@ const Index = () => {
           viewZoom={viewZoom}
         />
       </div>
+
+      {/* Mobile sidebar */}
+      {isMobile && (
+        <Sidebar
+          companies={filteredCompanies}
+          selectedCompany={selectedCompany}
+          onCompanySelect={handleCompanySelect}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          viewType={viewType}
+          onViewTypeChange={setViewType}
+          selectedCountry={selectedCountry}
+          onCountryChange={setSelectedCountry}
+          areaFilter={areaFilter}
+          onAreaFilterChange={setAreaFilter}
+        />
+      )}
     </div>
   );
 };
