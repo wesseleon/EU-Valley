@@ -1,11 +1,23 @@
-import { useState, useEffect } from 'react';
-import { Lock } from 'lucide-react';
+import { useState, useEffect, createContext, useContext } from 'react';
+import { Lock, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 const STORAGE_KEY = 'eu-valley-admin-auth';
 const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+
+// Context for logout function
+const LogoutContext = createContext<(() => void) | null>(null);
+
+export const useAdminLogout = () => {
+  const logout = useContext(LogoutContext);
+  return logout || (() => {
+    localStorage.removeItem(STORAGE_KEY);
+    window.location.reload();
+  });
+};
 
 interface AdminPasswordGateProps {
   children: React.ReactNode;
@@ -13,6 +25,7 @@ interface AdminPasswordGateProps {
 
 export const AdminPasswordGate = ({ children }: AdminPasswordGateProps) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -38,13 +51,18 @@ export const AdminPasswordGate = ({ children }: AdminPasswordGateProps) => {
     e.preventDefault();
     setError('');
 
+    if (!username.trim()) {
+      setError('Username is required');
+      return;
+    }
+
     try {
       const response = await fetch('/api/admin-login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password }),
       });
 
       const data = await response.json();
@@ -52,17 +70,25 @@ export const AdminPasswordGate = ({ children }: AdminPasswordGateProps) => {
       if (data.success) {
         const session = {
           expiry: Date.now() + SESSION_DURATION,
+          username: username,
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
         setIsAuthenticated(true);
       } else {
-        setError('Incorrect password');
+        setError('Incorrect username or password');
         setPassword('');
       }
     } catch (err) {
       setError('Failed to authenticate. Please try again.');
       setPassword('');
     }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    setIsAuthenticated(false);
+    setUsername('');
+    setPassword('');
   };
 
   if (isLoading) {
@@ -74,7 +100,11 @@ export const AdminPasswordGate = ({ children }: AdminPasswordGateProps) => {
   }
 
   if (isAuthenticated) {
-    return <>{children}</>;
+    return (
+      <LogoutContext.Provider value={handleLogout}>
+        {children}
+      </LogoutContext.Provider>
+    );
   }
 
   return (
@@ -86,23 +116,43 @@ export const AdminPasswordGate = ({ children }: AdminPasswordGateProps) => {
           </div>
           <CardTitle>Admin Access</CardTitle>
           <CardDescription>
-            Enter the admin password to manage companies
+            Enter your credentials to manage companies
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
-                autoFocus
-              />
-              {error && (
-                <p className="text-sm text-destructive">{error}</p>
-              )}
+              <Label htmlFor="username">Username</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="username"
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Enter username"
+                  className="pl-10"
+                  autoFocus
+                />
+              </div>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter password"
+                  className="pl-10"
+                />
+              </div>
+            </div>
+            {error && (
+              <p className="text-sm text-destructive">{error}</p>
+            )}
             <Button type="submit" className="w-full">
               Access Admin Panel
             </Button>

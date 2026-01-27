@@ -154,7 +154,13 @@ export const MapContainer = ({
       zoom: viewZoom,
       minZoom: 2,
       maxZoom: 18,
+      attributionControl: false, // Disable default attribution
     });
+
+    // Add compact attribution control
+    map.current.addControl(new maplibregl.AttributionControl({
+      compact: true, // This collapses the attribution by default
+    }), 'bottom-right');
 
     map.current.addControl(new maplibregl.NavigationControl(), 'bottom-right');
 

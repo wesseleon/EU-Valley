@@ -1,75 +1,142 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Company, companies as defaultCompanies } from '@/data/companies';
 
-const STORAGE_KEY = 'eu-valley-custom-companies';
+const STORAGE_KEY = 'eu-valley-companies';
+const HIDDEN_KEY = 'eu-valley-hidden-companies';
+
+export interface StoredCompany extends Company {
+  createdAt?: string;
+  updatedAt?: string;
+  lastEditDetails?: string;
+  alternativeFor?: string[];
+}
 
 export const useCompanyStorage = () => {
-  const [customCompanies, setCustomCompanies] = useState<Company[]>([]);
+  const [companies, setCompanies] = useState<StoredCompany[]>([]);
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Load custom companies from localStorage
+  // Initialize companies from localStorage or default
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
+      const hidden = localStorage.getItem(HIDDEN_KEY);
+      
       if (stored) {
-        const parsed = JSON.parse(stored);
-        setCustomCompanies(parsed);
+        setCompanies(JSON.parse(stored));
+      } else {
+        // First load: migrate default companies to localStorage
+        const now = new Date().toISOString();
+        const migratedCompanies: StoredCompany[] = defaultCompanies.map(c => ({
+          ...c,
+          createdAt: now,
+          updatedAt: now,
+          alternativeFor: [],
+        }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(migratedCompanies));
+        setCompanies(migratedCompanies);
+      }
+      
+      if (hidden) {
+        setHiddenIds(new Set(JSON.parse(hidden)));
       }
     } catch (error) {
-      console.error('Failed to load custom companies:', error);
+      console.error('Failed to load companies:', error);
+      setCompanies(defaultCompanies.map(c => ({ ...c })));
     }
     setIsLoaded(true);
   }, []);
 
-  // Save custom companies to localStorage
-  const saveCustomCompanies = useCallback((companies: Company[]) => {
+  // Save companies to localStorage
+  const saveCompanies = useCallback((updatedCompanies: StoredCompany[]) => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(companies));
-      setCustomCompanies(companies);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCompanies));
+      setCompanies(updatedCompanies);
     } catch (error) {
-      console.error('Failed to save custom companies:', error);
+      console.error('Failed to save companies:', error);
+    }
+  }, []);
+
+  // Save hidden IDs
+  const saveHiddenIds = useCallback((ids: Set<string>) => {
+    try {
+      localStorage.setItem(HIDDEN_KEY, JSON.stringify([...ids]));
+      setHiddenIds(ids);
+    } catch (error) {
+      console.error('Failed to save hidden IDs:', error);
     }
   }, []);
 
   // Add a new company
-  const addCompany = useCallback((company: Omit<Company, 'id'>) => {
-    const id = company.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
-    const newCompany: Company = { ...company, id };
+  const addCompany = useCallback((company: Omit<StoredCompany, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const id = company.name.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Date.now();
+    const now = new Date().toISOString();
+    
+    const newCompany: StoredCompany = { 
+      ...company, 
+      id,
+      createdAt: now,
+      updatedAt: now,
+      alternativeFor: company.alternativeFor || [],
+    };
     
     // Check for duplicate
-    const allCompanies = [...defaultCompanies, ...customCompanies];
-    if (allCompanies.some(c => c.id === id || c.name.toLowerCase() === company.name.toLowerCase())) {
+    if (companies.some(c => c.name.toLowerCase() === company.name.toLowerCase())) {
       throw new Error('A company with this name already exists');
     }
     
-    const updated = [...customCompanies, newCompany];
-    saveCustomCompanies(updated);
+    const updated = [...companies, newCompany];
+    saveCompanies(updated);
     return newCompany;
-  }, [customCompanies, saveCustomCompanies]);
+  }, [companies, saveCompanies]);
 
-  // Remove a custom company
+  // Remove a company
   const removeCompany = useCallback((id: string) => {
-    const updated = customCompanies.filter(c => c.id !== id);
-    saveCustomCompanies(updated);
-  }, [customCompanies, saveCustomCompanies]);
+    const updated = companies.filter(c => c.id !== id);
+    saveCompanies(updated);
+  }, [companies, saveCompanies]);
 
-  // Update a custom company
-  const updateCompany = useCallback((id: string, updates: Partial<Company>) => {
-    const updated = customCompanies.map(c => 
-      c.id === id ? { ...c, ...updates } : c
+  // Update a company
+  const updateCompany = useCallback((id: string, updates: Partial<StoredCompany>, editDetails?: string) => {
+    const now = new Date().toISOString();
+    const updated = companies.map(c => 
+      c.id === id ? { 
+        ...c, 
+        ...updates, 
+        updatedAt: now,
+        lastEditDetails: editDetails || `Updated: ${Object.keys(updates).join(', ')}`,
+      } : c
     );
-    saveCustomCompanies(updated);
-  }, [customCompanies, saveCustomCompanies]);
+    saveCompanies(updated);
+  }, [companies, saveCompanies]);
 
-  // Get all companies (default + custom)
-  const allCompanies = [...defaultCompanies, ...customCompanies];
+  // Toggle visibility
+  const toggleVisibility = useCallback((id: string) => {
+    const newHidden = new Set(hiddenIds);
+    if (newHidden.has(id)) {
+      newHidden.delete(id);
+    } else {
+      newHidden.add(id);
+    }
+    saveHiddenIds(newHidden);
+  }, [hiddenIds, saveHiddenIds]);
+
+  // Check if visible
+  const isVisible = useCallback((id: string) => !hiddenIds.has(id), [hiddenIds]);
+
+  // Get visible companies only
+  const visibleCompanies = companies.filter(c => !hiddenIds.has(c.id));
 
   return {
-    companies: allCompanies,
-    customCompanies,
+    companies: visibleCompanies,
+    allCompanies: companies,
+    customCompanies: companies, // Backward compatibility
+    hiddenIds,
     isLoaded,
     addCompany,
     removeCompany,
     updateCompany,
+    toggleVisibility,
+    isVisible,
   };
 };

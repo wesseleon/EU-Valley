@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, MapPin, Loader2, Search, Pencil, X, Check } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, MapPin, Loader2, Search, Pencil, X, Check, Eye, EyeOff, LogOut, Clock, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,21 +10,23 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { useCompanyStorage } from '@/hooks/useCompanyStorage';
-import { countries, categories, companies as defaultCompanies } from '@/data/companies';
+import { useCompanyStorage, StoredCompany } from '@/hooks/useCompanyStorage';
+import { countries, categories } from '@/data/companies';
 import { countryCodeToFlag } from '@/lib/countryFlags';
-import { AdminPasswordGate } from '@/components/admin/AdminPasswordGate';
+import { AdminPasswordGate, useAdminLogout } from '@/components/admin/AdminPasswordGate';
 
 const AdminContent = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { customCompanies, addCompany, removeCompany, updateCompany } = useCompanyStorage();
+  const logout = useAdminLogout();
+  const { allCompanies, addCompany, removeCompany, updateCompany, toggleVisibility, isVisible } = useCompanyStorage();
   
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<Record<string, string>>({});
+  const [editForm, setEditForm] = useState<Record<string, any>>({});
   
   const [form, setForm] = useState({
     name: '',
@@ -38,22 +40,15 @@ const AdminContent = () => {
     category: 'Technology',
     latitude: 0,
     longitude: 0,
+    alternativeFor: '',
   });
-
-  // Combine all companies for the list view
-  const allCompanies = useMemo(() => {
-    const combined = [
-      ...defaultCompanies.map(c => ({ ...c, isDefault: true })),
-      ...customCompanies.map(c => ({ ...c, isDefault: false })),
-    ];
-    return combined.sort((a, b) => a.name.localeCompare(b.name));
-  }, [customCompanies]);
 
   // Filter companies based on search
   const filteredCompanies = useMemo(() => {
-    if (!searchQuery.trim()) return allCompanies;
+    const sorted = [...allCompanies].sort((a, b) => a.name.localeCompare(b.name));
+    if (!searchQuery.trim()) return sorted;
     const query = searchQuery.toLowerCase();
-    return allCompanies.filter(c => 
+    return sorted.filter(c => 
       c.name.toLowerCase().includes(query) ||
       c.city.toLowerCase().includes(query) ||
       c.country.toLowerCase().includes(query) ||
@@ -157,6 +152,7 @@ const AdminContent = () => {
         website: form.website.startsWith('http') ? form.website : `https://${form.website}`,
         logoUrl,
         category: form.category,
+        alternativeFor: form.alternativeFor.split(',').map(s => s.trim()).filter(Boolean),
       });
 
       toast({ title: 'Company added', description: `${form.name} has been added to the map.` });
@@ -173,6 +169,7 @@ const AdminContent = () => {
         category: 'Technology',
         latitude: 0,
         longitude: 0,
+        alternativeFor: '',
       });
     } catch (err) {
       toast({ 
@@ -188,7 +185,7 @@ const AdminContent = () => {
     toast({ title: 'Company removed', description: `${name} has been removed from the map.` });
   };
 
-  const startEditing = (company: typeof allCompanies[0]) => {
+  const startEditing = (company: StoredCompany) => {
     setEditingId(company.id);
     setEditForm({
       name: company.name,
@@ -197,6 +194,10 @@ const AdminContent = () => {
       website: company.website,
       description: company.description,
       logoUrl: company.logoUrl,
+      alternativeFor: (company.alternativeFor || []).join(', '),
+      createdAt: company.createdAt,
+      updatedAt: company.updatedAt,
+      lastEditDetails: company.lastEditDetails,
     });
   };
 
@@ -206,6 +207,10 @@ const AdminContent = () => {
   };
 
   const saveEditing = (id: string) => {
+    const alternativeForArray = editForm.alternativeFor
+      ? editForm.alternativeFor.split(',').map((s: string) => s.trim()).filter(Boolean)
+      : [];
+    
     updateCompany(id, {
       name: editForm.name,
       city: editForm.city,
@@ -213,24 +218,36 @@ const AdminContent = () => {
       website: editForm.website,
       description: editForm.description,
       logoUrl: editForm.logoUrl,
+      alternativeFor: alternativeForArray,
     });
     toast({ title: 'Company updated', description: `${editForm.name} has been updated.` });
     setEditingId(null);
     setEditForm({});
   };
 
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'Unknown';
+    return new Date(dateString).toLocaleString();
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-6xl mx-auto p-6 space-y-6">
         {/* Header */}
-        <header className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={() => navigate('/')} className="hover:bg-muted transition-colors">
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Admin Panel</h1>
-            <p className="text-muted-foreground">Manage companies on the EU Valley map</p>
+        <header className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="outline" size="icon" onClick={() => navigate('/')} className="hover:bg-primary/10 transition-colors">
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Admin Panel</h1>
+              <p className="text-muted-foreground">Manage companies on the EU Valley map</p>
+            </div>
           </div>
+          <Button variant="outline" onClick={logout} className="gap-2 hover:bg-destructive hover:text-destructive-foreground transition-colors">
+            <LogOut className="w-4 h-4" />
+            Log out
+          </Button>
         </header>
 
         <Tabs defaultValue="list" className="space-y-6">
@@ -245,7 +262,7 @@ const AdminContent = () => {
               <CardHeader>
                 <CardTitle>All Companies ({allCompanies.length})</CardTitle>
                 <CardDescription>
-                  View all companies. Custom companies can be edited or removed.
+                  All companies can be edited, hidden, or removed.
                 </CardDescription>
                 <div className="relative mt-2">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -269,11 +286,30 @@ const AdminContent = () => {
                       filteredCompanies.map((company) => (
                         <div
                           key={company.id}
-                          className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+                          className={`flex items-center justify-between p-3 rounded-lg border bg-card transition-colors ${
+                            !isVisible(company.id) ? 'opacity-50' : 'hover:bg-primary/5'
+                          }`}
                         >
                           {editingId === company.id ? (
                             // Edit mode
                             <div className="flex-1 space-y-3">
+                              {/* Timestamps */}
+                              <div className="flex flex-wrap gap-4 text-xs text-muted-foreground bg-primary/5 p-2 rounded-lg">
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="w-3 h-3" />
+                                  Created: {formatDate(editForm.createdAt)}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  Last edited: {formatDate(editForm.updatedAt)}
+                                </div>
+                                {editForm.lastEditDetails && (
+                                  <div className="w-full text-xs">
+                                    Last change: {editForm.lastEditDetails}
+                                  </div>
+                                )}
+                              </div>
+                              
                               <div className="grid grid-cols-2 gap-2">
                                 <Input
                                   value={editForm.name}
@@ -311,6 +347,11 @@ const AdminContent = () => {
                                 onChange={(e) => setEditForm(prev => ({ ...prev, logoUrl: e.target.value }))}
                                 placeholder="Logo URL"
                               />
+                              <Input
+                                value={editForm.alternativeFor}
+                                onChange={(e) => setEditForm(prev => ({ ...prev, alternativeFor: e.target.value }))}
+                                placeholder="Alternative for (comma-separated, e.g., Google, Meta)"
+                              />
                               <Textarea
                                 value={editForm.description}
                                 onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
@@ -343,10 +384,8 @@ const AdminContent = () => {
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2">
                                     <p className="font-medium truncate">{company.name}</p>
-                                    {company.isDefault ? (
-                                      <Badge variant="outline" className="text-xs shrink-0">Default</Badge>
-                                    ) : (
-                                      <Badge variant="secondary" className="text-xs shrink-0">Custom</Badge>
+                                    {!isVisible(company.id) && (
+                                      <Badge variant="outline" className="text-xs shrink-0">Hidden</Badge>
                                     )}
                                   </div>
                                   <p className="text-xs text-muted-foreground truncate">
@@ -357,27 +396,36 @@ const AdminContent = () => {
                                   {countryCodeToFlag(company.countryCode)}
                                 </span>
                               </div>
-                              <div className="flex gap-1 ml-2">
-                                {!company.isDefault && (
-                                  <>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => startEditing(company)}
-                                      className="hover:bg-primary/10 transition-colors"
-                                    >
-                                      <Pencil className="w-4 h-4" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => handleDelete(company.id, company.name)}
-                                      className="text-destructive hover:text-destructive hover:bg-destructive/10 transition-colors"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                  </>
-                                )}
+                              <div className="flex items-center gap-2 ml-2">
+                                {/* Visibility toggle */}
+                                <div className="flex items-center gap-1">
+                                  <Switch
+                                    checked={isVisible(company.id)}
+                                    onCheckedChange={() => toggleVisibility(company.id)}
+                                    aria-label={`Toggle ${company.name} visibility`}
+                                  />
+                                  {isVisible(company.id) ? (
+                                    <Eye className="w-4 h-4 text-muted-foreground" />
+                                  ) : (
+                                    <EyeOff className="w-4 h-4 text-muted-foreground" />
+                                  )}
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => startEditing(company)}
+                                  className="hover:bg-primary/10 transition-colors"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDelete(company.id, company.name)}
+                                  className="text-destructive hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
                               </div>
                             </>
                           )}
@@ -452,7 +500,7 @@ const AdminContent = () => {
                         variant="outline" 
                         onClick={geocodeAddress}
                         disabled={isGeocoding}
-                        className="hover:bg-muted transition-colors"
+                        className="hover:bg-primary/10 transition-colors"
                       >
                         {isGeocoding ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
                       </Button>
@@ -498,6 +546,19 @@ const AdminContent = () => {
                     />
                     <p className="text-xs text-muted-foreground">
                       Leave empty to auto-fetch from website
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="alternativeFor">Alternative For (optional)</Label>
+                    <Input
+                      id="alternativeFor"
+                      value={form.alternativeFor}
+                      onChange={(e) => handleInputChange('alternativeFor', e.target.value)}
+                      placeholder="e.g., Google, Amazon, Meta (comma-separated)"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Non-European competitors this company can replace
                     </p>
                   </div>
 
