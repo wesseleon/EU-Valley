@@ -6,6 +6,7 @@ import { SidebarHeader } from './SidebarHeader';
 import { CompanyDetail } from './CompanyDetail';
 import { MobileSidebar } from './MobileSidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { createFallbackImage } from '@/lib/createFallbackImage';
 
 interface SidebarProps {
   companies: Company[];
@@ -107,15 +108,15 @@ export const Sidebar = ({
                 <figure className={`bg-background rounded-lg border border-border overflow-hidden flex items-center justify-center shrink-0 p-0.5 transition-transform duration-200 ${
                   hoveredCompany === company.id ? 'scale-110' : 'scale-100'
                 }`} style={{ width: 44, height: 44 }}>
-                  <img 
-                    src={company.logoUrl} 
-                    alt=""
-                    className="w-9 h-9 object-contain rounded-md"
-                    loading="lazy"
-                    onError={(e) => {
-                      e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(company.name)}&size=32&background=random`;
-                    }}
-                  />
+                    <img
+                      src={company.logoUrl || createFallbackImage(company.name)}
+                      alt=""
+                      className="w-9 h-9 object-contain rounded-md"
+                      loading="lazy"
+                      onError={(e) => {
+                        e.currentTarget.src = createFallbackImage(company.name);
+                      }}
+                    />
                 </figure>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-foreground truncate">{company.name}</p>
