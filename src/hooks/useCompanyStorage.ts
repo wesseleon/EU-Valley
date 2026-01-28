@@ -17,17 +17,10 @@ interface CompanyData {
 const STORAGE_KEY = 'eu-valley-companies';
 const HIDDEN_KEY = 'eu-valley-hidden';
 
-// Use relative URL for API - will work in production Vercel
+// Always use relative URL for API - works in both preview and production
 const getApiUrl = () => {
-  // Check if we're in a production environment (on vercel or the published domain)
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    if (hostname.includes('vercel.app') || hostname === 'eu-valley.lovable.app') {
-      return '/api/companies';
-    }
-  }
-  // For preview/development, use localStorage only
-  return null;
+  // Always return the API URL - let the serverless function handle it
+  return '/api/companies';
 };
 
 // Helper to migrate default companies
@@ -49,10 +42,6 @@ export const useCompanyStorage = () => {
   // Fetch data from API
   const fetchFromApi = useCallback(async () => {
     const apiUrl = getApiUrl();
-    if (!apiUrl) {
-      console.log('Running in preview mode - using localStorage only');
-      return false;
-    }
     
     try {
       const response = await fetch(apiUrl);
@@ -83,10 +72,6 @@ export const useCompanyStorage = () => {
   // Save data to API
   const saveToApi = useCallback(async (companies: StoredCompany[], hidden: string[]) => {
     const apiUrl = getApiUrl();
-    if (!apiUrl) {
-      console.log('Running in preview mode - saving to localStorage only');
-      return true; // Return true since localStorage save will succeed
-    }
     
     setIsSyncing(true);
     try {

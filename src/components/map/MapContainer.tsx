@@ -241,34 +241,16 @@ export const MapContainer = ({
       });
     });
 
-    // Hover effects - change cursor and increase icon size
-    let hoveredCompanyId: string | null = null;
-
-    map.current.on('mouseenter', 'company-pins', (e) => {
+    // Hover effects - change cursor only (border changes handled via image regeneration would be complex)
+    map.current.on('mouseenter', 'company-pins', () => {
       if (map.current) {
         map.current.getCanvas().style.cursor = 'pointer';
-        
-        if (e.features && e.features.length > 0) {
-          hoveredCompanyId = e.features[0].properties?.id;
-          
-          // Increase icon size on hover
-          map.current.setPaintProperty('company-pins', 'icon-opacity', [
-            'case',
-            ['==', ['get', 'id'], hoveredCompanyId],
-            1,
-            0.85
-          ]);
-        }
       }
     });
 
     map.current.on('mouseleave', 'company-pins', () => {
       if (map.current) {
         map.current.getCanvas().style.cursor = '';
-        hoveredCompanyId = null;
-        
-        // Reset icon opacity
-        map.current.setPaintProperty('company-pins', 'icon-opacity', 1);
       }
     });
 

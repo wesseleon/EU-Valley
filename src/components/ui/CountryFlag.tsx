@@ -15,7 +15,7 @@ export const CountryFlag = ({ countryCode, size = 'm', className }: CountryFlagP
   }
   
   return (
-    <span className={className}>
+    <span className={`inline-flex items-center ${className || ''}`}>
       <Flag 
         code={code as any}
         size={size}
