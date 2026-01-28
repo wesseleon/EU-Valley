@@ -14,7 +14,6 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { useCompanyStorage, StoredCompany } from '@/hooks/useCompanyStorage';
 import { countries, categories } from '@/data/companies';
-import { countryCodeToFlag } from '@/lib/countryFlags';
 import { AdminPasswordGate, useAdminLogout } from '@/components/admin/AdminPasswordGate';
 
 const AdminContent = () => {
@@ -286,9 +285,7 @@ const AdminContent = () => {
                       filteredCompanies.map((company) => (
                         <div
                           key={company.id}
-                          className={`flex items-center justify-between p-3 rounded-lg border bg-card transition-colors ${
-                            !isVisible(company.id) ? 'opacity-50' : 'hover:bg-primary/5'
-                          }`}
+                          className="flex items-center justify-between p-3 rounded-lg border bg-card transition-colors hover:bg-primary/5"
                         >
                           {editingId === company.id ? (
                             // Edit mode
@@ -392,20 +389,17 @@ const AdminContent = () => {
                                     {company.city}, {company.country} • {company.category}
                                   </p>
                                 </div>
-                                <span className="text-xl shrink-0" role="img" aria-label={`${company.country} flag`}>
-                                  {countryCodeToFlag(company.countryCode)}
-                                </span>
                               </div>
                               <div className="flex items-center gap-2 ml-2">
-                                {/* Visibility toggle */}
-                                <div className="flex items-center gap-1">
+                                {/* Visibility toggle - standard UI pattern */}
+                                <div className="flex items-center gap-1.5">
                                   <Switch
                                     checked={isVisible(company.id)}
                                     onCheckedChange={() => toggleVisibility(company.id)}
                                     aria-label={`Toggle ${company.name} visibility`}
                                   />
                                   {isVisible(company.id) ? (
-                                    <Eye className="w-4 h-4 text-muted-foreground" />
+                                    <Eye className="w-4 h-4 text-primary" />
                                   ) : (
                                     <EyeOff className="w-4 h-4 text-muted-foreground" />
                                   )}

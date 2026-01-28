@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Company } from '@/data/companies';
-import { countryCodeToFlag } from '@/lib/countryFlags';
+import { CountryFlag } from '@/components/ui/CountryFlag';
 
 interface CompanyDetailProps {
   company: Company & { alternativeFor?: string[] };
@@ -91,10 +91,9 @@ export const CompanyDetail = ({ company, onBack }: CompanyDetailProps) => {
             </h2>
             <div className="pl-6">
               <div className="inline-flex items-center gap-2 px-3 py-2 bg-primary/5 border border-primary/10 rounded-lg">
-                <span className="text-xl" role="img" aria-label={`${company.country} flag`}>
-                  {countryCodeToFlag(company.countryCode)}
-                </span>
+                <CountryFlag countryCode={company.countryCode} size="l" />
                 <span className="text-sm font-semibold text-foreground">
+                  {company.country}
                   {company.country}
                 </span>
               </div>

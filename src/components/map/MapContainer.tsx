@@ -222,7 +222,7 @@ export const MapContainer = ({
       setMapLoaded(true);
     });
 
-    // Click handler for both layers
+    // Click handler for both layers - zoom to pin and select
     ['company-pins', 'company-labels'].forEach(layerId => {
       map.current!.on('click', layerId, (e) => {
         if (!e.features || e.features.length === 0) return;
@@ -230,21 +230,45 @@ export const MapContainer = ({
         const companyId = feature.properties?.id;
         const company = companies.find(c => c.id === companyId);
         if (company) {
+          // Zoom to the clicked pin
+          map.current?.flyTo({
+            center: [company.longitude, company.latitude],
+            zoom: 14,
+            duration: 1500,
+          });
           onCompanySelect(company);
         }
       });
     });
 
-    // Hover effects
-    map.current.on('mouseenter', 'company-pins', () => {
+    // Hover effects - change cursor and increase icon size
+    let hoveredCompanyId: string | null = null;
+
+    map.current.on('mouseenter', 'company-pins', (e) => {
       if (map.current) {
         map.current.getCanvas().style.cursor = 'pointer';
+        
+        if (e.features && e.features.length > 0) {
+          hoveredCompanyId = e.features[0].properties?.id;
+          
+          // Increase icon size on hover
+          map.current.setPaintProperty('company-pins', 'icon-opacity', [
+            'case',
+            ['==', ['get', 'id'], hoveredCompanyId],
+            1,
+            0.85
+          ]);
+        }
       }
     });
 
     map.current.on('mouseleave', 'company-pins', () => {
       if (map.current) {
         map.current.getCanvas().style.cursor = '';
+        hoveredCompanyId = null;
+        
+        // Reset icon opacity
+        map.current.setPaintProperty('company-pins', 'icon-opacity', 1);
       }
     });
 
