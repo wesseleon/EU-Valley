@@ -17,10 +17,22 @@ interface CompanyData {
 const STORAGE_KEY = 'eu-valley-companies';
 const HIDDEN_KEY = 'eu-valley-hidden';
 
-// Always use relative URL for API - works in both preview and production
+// Use the production URL for the API since Vercel serverless functions 
+// only work on Vercel deployments, not in Lovable preview
 const getApiUrl = () => {
-  // Always return the API URL - let the serverless function handle it
-  return '/api/companies';
+  // Production Vercel URL - this is where the API is deployed
+  const productionApiUrl = 'https://eu-valley.lovable.app/api/companies';
+  
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    // If we're on the production domain, use relative URL
+    if (hostname === 'eu-valley.lovable.app' || hostname.includes('vercel.app')) {
+      return '/api/companies';
+    }
+  }
+  
+  // For preview/development, call the production API directly
+  return productionApiUrl;
 };
 
 // Helper to migrate default companies
@@ -44,10 +56,21 @@ export const useCompanyStorage = () => {
     const apiUrl = getApiUrl();
     
     try {
+      console.log('Fetching companies from API...');
       const response = await fetch(apiUrl);
-      if (!response.ok) throw new Error('Failed to fetch');
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API fetch failed:', response.status, errorText);
+        throw new Error(`Failed to fetch: ${response.status}`);
+      }
       
       const data: CompanyData = await response.json();
+      console.log('API response:', { 
+        companiesCount: data.companies?.length || 0, 
+        hiddenCount: data.hiddenIds?.length || 0,
+        lastUpdated: data.lastUpdated 
+      });
       
       if (data.companies && data.companies.length > 0) {
         setCustomCompanies(data.companies);
@@ -75,15 +98,23 @@ export const useCompanyStorage = () => {
     
     setIsSyncing(true);
     try {
+      console.log('Saving companies to API...', { companiesCount: companies.length, hiddenCount: hidden.length });
+      
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ companies, hiddenIds: hidden }),
       });
       
-      if (!response.ok) throw new Error('Failed to save');
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API save failed:', response.status, errorText);
+        throw new Error(`Failed to save: ${response.status}`);
+      }
       
       const result = await response.json();
+      console.log('API save successful:', result);
+      
       if (result.lastUpdated) {
         setLastSyncTime(new Date(result.lastUpdated));
       }

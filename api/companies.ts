@@ -13,6 +13,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
+  // Check if blob token is configured
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    console.error('BLOB_READ_WRITE_TOKEN is not configured');
+    return res.status(500).json({ 
+      error: 'Storage not configured',
+      details: 'BLOB_READ_WRITE_TOKEN environment variable is missing'
+    });
+  }
+
   try {
     if (req.method === 'GET') {
       // Get companies from blob storage
@@ -20,12 +29,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const companiesBlob = blobs.find(b => b.pathname === BLOB_FILENAME);
       
       if (!companiesBlob) {
+        console.log('No companies.json blob found, returning empty data');
         return res.status(200).json({ companies: [], hiddenIds: [], lastUpdated: null });
       }
 
       const response = await fetch(companiesBlob.url);
       const data = await response.json();
       
+      console.log(`Fetched ${data.companies?.length || 0} companies from blob storage`);
       return res.status(200).json(data);
     }
 
@@ -42,12 +53,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         lastUpdated: new Date().toISOString(),
       };
 
-      await put(BLOB_FILENAME, JSON.stringify(data), {
+      console.log(`Saving ${companies.length} companies to blob storage...`);
+
+      const result = await put(BLOB_FILENAME, JSON.stringify(data), {
         access: 'public',
         addRandomSuffix: false,
+        allowOverwrite: true, // Allow overwriting existing blob
+        contentType: 'application/json',
       });
 
-      return res.status(200).json({ success: true, lastUpdated: data.lastUpdated });
+      console.log(`Successfully saved to blob storage: ${result.url}`);
+      return res.status(200).json({ success: true, lastUpdated: data.lastUpdated, url: result.url });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });

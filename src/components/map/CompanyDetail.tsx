@@ -91,7 +91,7 @@ export const CompanyDetail = ({ company, onBack }: CompanyDetailProps) => {
             </h2>
             <div className="pl-6">
               <div className="inline-flex items-center gap-2 px-3 py-2 bg-primary/5 border border-primary/10 rounded-lg">
-                <CountryFlag countryCode={company.countryCode} size="l" />
+                <CountryFlag countryCode={company.countryCode} size="L" />
                 <span className="text-sm font-semibold text-foreground">
                   {company.country}
                 </span>
