@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface MobileSidebarProps {
   children: React.ReactNode;
@@ -65,7 +64,7 @@ export const MobileSidebar = ({ children, className }: MobileSidebarProps) => {
     <div
       ref={containerRef}
       className={cn(
-        "fixed inset-x-0 bottom-0 z-50 bg-card backdrop-blur-lg rounded-t-2xl shadow-xl transition-transform duration-300 ease-out md:hidden",
+        "fixed inset-x-0 bottom-0 z-50 bg-card backdrop-blur-lg rounded-t-2xl shadow-xl transition-transform duration-300 ease-out md:hidden border-t border-border",
         className
       )}
       style={{
@@ -89,13 +88,13 @@ export const MobileSidebar = ({ children, className }: MobileSidebarProps) => {
         )}
       </div>
       
-      {/* Content with scrolling enabled */}
-      <ScrollArea 
-        className="h-full" 
+      {/* Content with scrolling enabled - use overflow-auto for touch scrolling */}
+      <div 
+        className="overflow-y-auto overscroll-contain"
         style={{ maxHeight: 'calc(85vh - 3rem)' }}
       >
         {children}
-      </ScrollArea>
+      </div>
     </div>
   );
 };

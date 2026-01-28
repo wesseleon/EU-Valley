@@ -71,7 +71,7 @@ export const Sidebar = ({
   }
 
   const SidebarContent = (
-    <div className="w-full md:w-96 bg-card backdrop-blur-lg md:border-r md:border-border flex flex-col h-full">
+    <div className="w-full md:w-96 bg-card backdrop-blur-lg md:border-r border-border flex flex-col h-full">
       {/* Header with collapsible top section */}
       <SidebarHeader
         searchQuery={searchQuery}

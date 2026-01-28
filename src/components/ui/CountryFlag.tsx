@@ -21,7 +21,8 @@ export const CountryFlag = ({ countryCode, size = 'm', className }: CountryFlagP
         size={size}
         hasBorder={false}
         hasBorderRadius={true}
-        hasDropShadow={false}
+        hasDropShadow={true}
+        gradient="real-linear"
       />
     </span>
   );
