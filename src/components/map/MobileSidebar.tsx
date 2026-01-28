@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface MobileSidebarProps {
   children: React.ReactNode;
@@ -22,41 +23,59 @@ export const MobileSidebar = ({ children, className }: MobileSidebarProps) => {
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!isDragging) return;
     const diff = e.touches[0].clientY - dragStartY;
-    setCurrentTranslate(Math.max(0, diff));
-  }, [isDragging, dragStartY]);
+    
+    // Allow both up and down dragging
+    if (isExpanded) {
+      // When expanded, allow dragging down to collapse
+      setCurrentTranslate(Math.max(0, diff));
+    } else {
+      // When collapsed, allow dragging up to expand
+      setCurrentTranslate(Math.min(0, diff));
+    }
+  }, [isDragging, dragStartY, isExpanded]);
 
   const handleTouchEnd = useCallback(() => {
     setIsDragging(false);
-    if (currentTranslate > 100) {
+    
+    if (isExpanded && currentTranslate > 100) {
       setIsExpanded(false);
-    } else {
+    } else if (!isExpanded && currentTranslate < -100) {
       setIsExpanded(true);
     }
+    
     setCurrentTranslate(0);
-  }, [currentTranslate]);
+  }, [currentTranslate, isExpanded]);
 
   const toggleExpand = useCallback(() => {
     setIsExpanded(prev => !prev);
   }, []);
 
+  const getTransformStyle = () => {
+    if (isDragging) {
+      if (isExpanded) {
+        return `translateY(${currentTranslate}px)`;
+      } else {
+        return `translateY(calc(100% - 4rem + ${currentTranslate}px))`;
+      }
+    }
+    return isExpanded ? 'translateY(0)' : 'translateY(calc(100% - 4rem))';
+  };
+
   return (
     <div
       ref={containerRef}
       className={cn(
-        "fixed inset-x-0 bottom-0 z-50 bg-card/95 backdrop-blur-lg rounded-t-2xl shadow-xl transition-transform duration-300 ease-out md:hidden",
-        isExpanded ? "translate-y-0" : "translate-y-[calc(100%-4rem)]",
+        "fixed inset-x-0 bottom-0 z-50 bg-card backdrop-blur-lg rounded-t-2xl shadow-xl transition-transform duration-300 ease-out md:hidden",
         className
       )}
       style={{
-        transform: isDragging && isExpanded 
-          ? `translateY(${currentTranslate}px)` 
-          : undefined,
+        transform: getTransformStyle(),
         maxHeight: '85vh',
       }}
     >
       {/* Drag handle */}
       <div
-        className="flex flex-col items-center py-3 cursor-grab active:cursor-grabbing"
+        className="flex flex-col items-center py-3 cursor-grab active:cursor-grabbing touch-none"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -70,10 +89,13 @@ export const MobileSidebar = ({ children, className }: MobileSidebarProps) => {
         )}
       </div>
       
-      {/* Content */}
-      <div className="overflow-hidden" style={{ maxHeight: 'calc(85vh - 3rem)' }}>
+      {/* Content with scrolling enabled */}
+      <ScrollArea 
+        className="h-full" 
+        style={{ maxHeight: 'calc(85vh - 3rem)' }}
+      >
         {children}
-      </div>
+      </ScrollArea>
     </div>
   );
 };

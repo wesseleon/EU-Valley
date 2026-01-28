@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Company } from '@/data/companies';
-import { countryCodeToFlag } from '@/lib/countryFlags';
+import { CountryFlag } from '@/components/ui/CountryFlag';
 import { SidebarHeader } from './SidebarHeader';
 import { CompanyDetail } from './CompanyDetail';
 import { MobileSidebar } from './MobileSidebar';
@@ -71,7 +71,7 @@ export const Sidebar = ({
   }
 
   const SidebarContent = (
-    <div className="w-full md:w-96 bg-card/95 backdrop-blur-lg border-r border-border flex flex-col h-full">
+    <div className="w-full md:w-96 bg-card backdrop-blur-lg md:border-r md:border-border flex flex-col h-full">
       {/* Header with collapsible top section */}
       <SidebarHeader
         searchQuery={searchQuery}
@@ -121,8 +121,8 @@ export const Sidebar = ({
                   <p className="font-medium text-foreground truncate">{company.name}</p>
                   <p className="text-xs text-muted-foreground truncate">{company.category}</p>
                 </div>
-                <span className="text-lg shrink-0" role="img" aria-label={`${company.country} flag`}>
-                  {countryCodeToFlag(company.countryCode)}
+                <span className="shrink-0" role="img" aria-label={`${company.country} flag`}>
+                  <CountryFlag countryCode={company.countryCode} size="m" />
                 </span>
               </button>
             </li>
