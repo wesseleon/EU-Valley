@@ -94,7 +94,6 @@ export const CompanyDetail = ({ company, onBack }: CompanyDetailProps) => {
                 <CountryFlag countryCode={company.countryCode} size="l" />
                 <span className="text-sm font-semibold text-foreground">
                   {company.country}
-                  {company.country}
                 </span>
               </div>
             </div>

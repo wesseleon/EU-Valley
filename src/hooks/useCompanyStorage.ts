@@ -1,142 +1,248 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Company, companies as defaultCompanies } from '@/data/companies';
 
-const STORAGE_KEY = 'eu-valley-companies';
-const HIDDEN_KEY = 'eu-valley-hidden-companies';
-
 export interface StoredCompany extends Company {
+  alternativeFor?: string[];
   createdAt?: string;
   updatedAt?: string;
   lastEditDetails?: string;
-  alternativeFor?: string[];
 }
 
+interface CompanyData {
+  companies: StoredCompany[];
+  hiddenIds: string[];
+  lastUpdated: string | null;
+}
+
+const STORAGE_KEY = 'eu-valley-companies';
+const HIDDEN_KEY = 'eu-valley-hidden';
+const API_URL = '/api/companies';
+
+// Helper to migrate default companies
+const migrateDefaultCompanies = (): StoredCompany[] => {
+  return defaultCompanies.map(company => ({
+    ...company,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }));
+};
+
 export const useCompanyStorage = () => {
-  const [companies, setCompanies] = useState<StoredCompany[]>([]);
+  const [customCompanies, setCustomCompanies] = useState<StoredCompany[]>([]);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
-  // Initialize companies from localStorage or default
+  // Fetch data from API
+  const fetchFromApi = useCallback(async () => {
+    try {
+      const response = await fetch(API_URL);
+      if (!response.ok) throw new Error('Failed to fetch');
+      
+      const data: CompanyData = await response.json();
+      
+      if (data.companies && data.companies.length > 0) {
+        setCustomCompanies(data.companies);
+        setHiddenIds(new Set(data.hiddenIds || []));
+        
+        // Also update localStorage as cache
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data.companies));
+        localStorage.setItem(HIDDEN_KEY, JSON.stringify(data.hiddenIds || []));
+        
+        if (data.lastUpdated) {
+          setLastSyncTime(new Date(data.lastUpdated));
+        }
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.warn('Failed to fetch from API, using local data:', error);
+      return false;
+    }
+  }, []);
+
+  // Save data to API
+  const saveToApi = useCallback(async (companies: StoredCompany[], hidden: string[]) => {
+    setIsSyncing(true);
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companies, hiddenIds: hidden }),
+      });
+      
+      if (!response.ok) throw new Error('Failed to save');
+      
+      const result = await response.json();
+      if (result.lastUpdated) {
+        setLastSyncTime(new Date(result.lastUpdated));
+      }
+      return true;
+    } catch (error) {
+      console.error('Failed to save to API:', error);
+      return false;
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
+
+  // Load data on mount
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      const hidden = localStorage.getItem(HIDDEN_KEY);
+    const loadData = async () => {
+      // First, try to load from API
+      const apiSuccess = await fetchFromApi();
       
-      if (stored) {
-        setCompanies(JSON.parse(stored));
-      } else {
-        // First load: migrate default companies to localStorage
-        const now = new Date().toISOString();
-        const migratedCompanies: StoredCompany[] = defaultCompanies.map(c => ({
-          ...c,
-          createdAt: now,
-          updatedAt: now,
-          alternativeFor: [],
-        }));
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(migratedCompanies));
-        setCompanies(migratedCompanies);
+      if (!apiSuccess) {
+        // Fall back to localStorage
+        const storedData = localStorage.getItem(STORAGE_KEY);
+        const storedHidden = localStorage.getItem(HIDDEN_KEY);
+        
+        if (storedData) {
+          try {
+            setCustomCompanies(JSON.parse(storedData));
+          } catch {
+            // Invalid data, migrate defaults
+            const migrated = migrateDefaultCompanies();
+            setCustomCompanies(migrated);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+          }
+        } else {
+          // First time - migrate default companies
+          const migrated = migrateDefaultCompanies();
+          setCustomCompanies(migrated);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+          
+          // Also save to API
+          await saveToApi(migrated, []);
+        }
+        
+        if (storedHidden) {
+          try {
+            setHiddenIds(new Set(JSON.parse(storedHidden)));
+          } catch {
+            setHiddenIds(new Set());
+          }
+        }
       }
       
-      if (hidden) {
-        setHiddenIds(new Set(JSON.parse(hidden)));
-      }
-    } catch (error) {
-      console.error('Failed to load companies:', error);
-      setCompanies(defaultCompanies.map(c => ({ ...c })));
-    }
-    setIsLoaded(true);
-  }, []);
+      setIsLoaded(true);
+    };
 
-  // Save companies to localStorage
-  const saveCompanies = useCallback((updatedCompanies: StoredCompany[]) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedCompanies));
-      setCompanies(updatedCompanies);
-    } catch (error) {
-      console.error('Failed to save companies:', error);
-    }
-  }, []);
+    loadData();
+  }, [fetchFromApi, saveToApi]);
 
-  // Save hidden IDs
-  const saveHiddenIds = useCallback((ids: Set<string>) => {
-    try {
-      localStorage.setItem(HIDDEN_KEY, JSON.stringify([...ids]));
-      setHiddenIds(ids);
-    } catch (error) {
-      console.error('Failed to save hidden IDs:', error);
-    }
-  }, []);
-
-  // Add a new company
-  const addCompany = useCallback((company: Omit<StoredCompany, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const id = company.name.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Date.now();
-    const now = new Date().toISOString();
+  // Save whenever data changes (after initial load)
+  const persistData = useCallback(async (companies: StoredCompany[], hidden: Set<string>) => {
+    const hiddenArray = Array.from(hidden);
     
-    const newCompany: StoredCompany = { 
-      ...company, 
-      id,
-      createdAt: now,
-      updatedAt: now,
-      alternativeFor: company.alternativeFor || [],
+    // Save to localStorage immediately
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(companies));
+    localStorage.setItem(HIDDEN_KEY, JSON.stringify(hiddenArray));
+    
+    // Save to API
+    await saveToApi(companies, hiddenArray);
+  }, [saveToApi]);
+
+  const addCompany = useCallback((company: Omit<StoredCompany, 'id'>) => {
+    const newCompany: StoredCompany = {
+      ...company,
+      id: `custom-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
     
-    // Check for duplicate
-    if (companies.some(c => c.name.toLowerCase() === company.name.toLowerCase())) {
-      throw new Error('A company with this name already exists');
-    }
+    setCustomCompanies(prev => {
+      const updated = [...prev, newCompany];
+      persistData(updated, hiddenIds);
+      return updated;
+    });
     
-    const updated = [...companies, newCompany];
-    saveCompanies(updated);
     return newCompany;
-  }, [companies, saveCompanies]);
+  }, [hiddenIds, persistData]);
 
-  // Remove a company
   const removeCompany = useCallback((id: string) => {
-    const updated = companies.filter(c => c.id !== id);
-    saveCompanies(updated);
-  }, [companies, saveCompanies]);
+    setCustomCompanies(prev => {
+      const updated = prev.filter(c => c.id !== id);
+      persistData(updated, hiddenIds);
+      return updated;
+    });
+    
+    // Also remove from hidden if it was hidden
+    setHiddenIds(prev => {
+      const updated = new Set(prev);
+      updated.delete(id);
+      return updated;
+    });
+  }, [hiddenIds, persistData]);
 
-  // Update a company
-  const updateCompany = useCallback((id: string, updates: Partial<StoredCompany>, editDetails?: string) => {
-    const now = new Date().toISOString();
-    const updated = companies.map(c => 
-      c.id === id ? { 
-        ...c, 
-        ...updates, 
-        updatedAt: now,
-        lastEditDetails: editDetails || `Updated: ${Object.keys(updates).join(', ')}`,
-      } : c
-    );
-    saveCompanies(updated);
-  }, [companies, saveCompanies]);
+  const updateCompany = useCallback((id: string, updates: Partial<StoredCompany>) => {
+    setCustomCompanies(prev => {
+      const updated = prev.map(c => {
+        if (c.id === id) {
+          const changedFields = Object.keys(updates).filter(key => 
+            (updates as any)[key] !== (c as any)[key]
+          );
+          return {
+            ...c,
+            ...updates,
+            updatedAt: new Date().toISOString(),
+            lastEditDetails: changedFields.length > 0 
+              ? `Updated: ${changedFields.join(', ')}`
+              : c.lastEditDetails,
+          };
+        }
+        return c;
+      });
+      persistData(updated, hiddenIds);
+      return updated;
+    });
+  }, [hiddenIds, persistData]);
 
-  // Toggle visibility
   const toggleVisibility = useCallback((id: string) => {
-    const newHidden = new Set(hiddenIds);
-    if (newHidden.has(id)) {
-      newHidden.delete(id);
-    } else {
-      newHidden.add(id);
-    }
-    saveHiddenIds(newHidden);
-  }, [hiddenIds, saveHiddenIds]);
+    setHiddenIds(prev => {
+      const updated = new Set(prev);
+      if (updated.has(id)) {
+        updated.delete(id);
+      } else {
+        updated.add(id);
+      }
+      persistData(customCompanies, updated);
+      return updated;
+    });
+  }, [customCompanies, persistData]);
 
-  // Check if visible
-  const isVisible = useCallback((id: string) => !hiddenIds.has(id), [hiddenIds]);
+  const isVisible = useCallback((id: string) => {
+    return !hiddenIds.has(id);
+  }, [hiddenIds]);
 
-  // Get visible companies only
-  const visibleCompanies = companies.filter(c => !hiddenIds.has(c.id));
+  // Combine all companies and filter visible
+  const allCompanies = useMemo(() => customCompanies, [customCompanies]);
+  
+  const visibleCompanies = useMemo(() => 
+    customCompanies.filter(c => !hiddenIds.has(c.id)),
+    [customCompanies, hiddenIds]
+  );
+
+  // Manual sync function
+  const syncNow = useCallback(async () => {
+    await fetchFromApi();
+  }, [fetchFromApi]);
 
   return {
+    allCompanies,
     companies: visibleCompanies,
-    allCompanies: companies,
-    customCompanies: companies, // Backward compatibility
+    visibleCompanies,
+    customCompanies,
     hiddenIds,
-    isLoaded,
     addCompany,
     removeCompany,
     updateCompany,
     toggleVisibility,
     isVisible,
+    isLoaded,
+    isSyncing,
+    lastSyncTime,
+    syncNow,
   };
 };
