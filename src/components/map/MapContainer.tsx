@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Company } from '@/data/companies';
+import { createFallbackImage, PIN_SIZE, PIN_PADDING, PIN_BORDER_WIDTH, PIN_BORDER_RADIUS, PIN_INNER_RADIUS } from '@/lib/createFallbackImage';
 
 interface MapContainerProps {
   companies: Company[];
@@ -297,6 +298,16 @@ export const MapContainer = ({
       duration: 1000,
     });
   }, [viewCenter, viewZoom]);
+
+  useEffect(() => {
+  if (!map.current || !selectedCompany) return;
+  // Ensure map exists and company has coords
+  map.current.flyTo({
+    center: [selectedCompany.longitude, selectedCompany.latitude],
+    zoom: 14,
+    duration: 1500,
+  });
+  }, [selectedCompany]);
 
   return (
     <div className="relative w-full h-full">
