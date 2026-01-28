@@ -1,5 +1,4 @@
 import Flag from 'react-flagpack';
-import 'react-flagpack/dist/style.css';
 
 interface CountryFlagProps {
   countryCode: string;
