@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Company } from '@/data/companies';
 import { CountryFlag } from '@/components/ui/CountryFlag';
+import { createFallbackImage } from '@/lib/createFallbackImage';
 
 interface CompanyDetailProps {
   company: Company & { alternativeFor?: string[] };
@@ -29,13 +30,13 @@ export const CompanyDetail = ({ company, onBack }: CompanyDetailProps) => {
           {/* Logo */}
           <figure className="flex justify-center">
             <div className="w-24 h-24 bg-background rounded-xl border border-border overflow-hidden flex items-center justify-center p-1">
-              <img 
-                src={company.logoUrl} 
+              <img
+                src={company.logoUrl || createFallbackImage(company.name)}
                 alt={`${company.name} logo`}
                 className="w-20 h-20 object-contain rounded-lg"
                 loading="lazy"
                 onError={(e) => {
-                  e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(company.name)}&size=80&background=random`;
+                  e.currentTarget.src = createFallbackImage(company.name);
                 }}
               />
             </div>
