@@ -1,6 +1,5 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, MapPin, Loader2, Search, Pencil, X, Check, Eye, EyeOff, LogOut, Clock, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,12 +14,14 @@ import { useToast } from '@/hooks/use-toast';
 import { useCompanyStorage, StoredCompany } from '@/hooks/useCompanyStorage';
 import { countries, categories } from '@/data/companies';
 import { AdminPasswordGate, useAdminLogout } from '@/components/admin/AdminPasswordGate';
+import { PixelIcon } from '@/components/ui/PixelIcon';
+import { createFallbackImage } from '@/lib/createFallbackImage';
 
 const AdminContent = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const logout = useAdminLogout();
-  const { allCompanies, addCompany, removeCompany, updateCompany, toggleVisibility, isVisible } = useCompanyStorage();
+  const { allCompanies, addCompany, removeCompany, updateCompany, toggleVisibility, isVisible, isSyncing, syncError } = useCompanyStorage();
   
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -109,7 +110,7 @@ const AdminContent = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!form.name.trim()) {
@@ -138,7 +139,7 @@ const AdminContent = () => {
         }
       }
 
-      addCompany({
+      await addCompany({
         name: form.name.trim(),
         latitude: form.latitude,
         longitude: form.longitude,
@@ -154,7 +155,7 @@ const AdminContent = () => {
         alternativeFor: form.alternativeFor.split(',').map(s => s.trim()).filter(Boolean),
       });
 
-      toast({ title: 'Company added', description: `${form.name} has been added to the map.` });
+      toast({ title: 'Company added', description: `${form.name} has been saved to the map.` });
       
       setForm({
         name: '',
@@ -179,8 +180,9 @@ const AdminContent = () => {
     }
   };
 
-  const handleDelete = (id: string, name: string) => {
-    removeCompany(id);
+  const handleDelete = async (id: string, name: string) => {
+    if (!window.confirm(`Remove ${name} from the map?`)) return;
+    await removeCompany(id);
     toast({ title: 'Company removed', description: `${name} has been removed from the map.` });
   };
 
@@ -205,12 +207,12 @@ const AdminContent = () => {
     setEditForm({});
   };
 
-  const saveEditing = (id: string) => {
+  const saveEditing = async (id: string) => {
     const alternativeForArray = editForm.alternativeFor
       ? editForm.alternativeFor.split(',').map((s: string) => s.trim()).filter(Boolean)
       : [];
     
-    updateCompany(id, {
+    await updateCompany(id, {
       name: editForm.name,
       city: editForm.city,
       category: editForm.category,
@@ -236,7 +238,7 @@ const AdminContent = () => {
         <header className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button variant="outline" size="icon" onClick={() => navigate('/')} className="hover:bg-primary/10 transition-colors">
-              <ArrowLeft className="w-5 h-5" />
+              <PixelIcon name="arrow-left" />
             </Button>
             <div>
               <h1 className="text-2xl font-bold text-foreground">Admin Panel</h1>
@@ -244,11 +246,12 @@ const AdminContent = () => {
             </div>
           </div>
           <Button variant="outline" onClick={logout} className="gap-2 hover:bg-destructive hover:text-destructive-foreground transition-colors">
-            <LogOut className="w-4 h-4" />
+            <PixelIcon name="logout" />
             Log out
           </Button>
         </header>
 
+        {syncError && <p className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive" role="alert">{syncError}</p>}
         <Tabs defaultValue="list" className="space-y-6">
           <TabsList className="grid w-full max-w-md grid-cols-2">
             <TabsTrigger value="list">All Companies</TabsTrigger>
@@ -264,7 +267,7 @@ const AdminContent = () => {
                   All companies can be edited, hidden, or removed.
                 </CardDescription>
                 <div className="relative mt-2">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <PixelIcon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     placeholder="Search by name, city, country, or category..."
                     value={searchQuery}
@@ -278,7 +281,7 @@ const AdminContent = () => {
                   <div className="space-y-2">
                     {filteredCompanies.length === 0 ? (
                       <div className="text-center py-12 text-muted-foreground">
-                        <Search className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                        <PixelIcon name="search" className="mx-auto mb-3 text-4xl opacity-50" />
                         <p>No companies found</p>
                       </div>
                     ) : (
@@ -293,11 +296,11 @@ const AdminContent = () => {
                               {/* Timestamps */}
                               <div className="flex flex-wrap gap-4 text-xs text-muted-foreground bg-primary/5 p-2 rounded-lg">
                                 <div className="flex items-center gap-1">
-                                  <Calendar className="w-3 h-3" />
+                                  <PixelIcon name="calendar-alt" />
                                   Created: {formatDate(editForm.createdAt)}
                                 </div>
                                 <div className="flex items-center gap-1">
-                                  <Clock className="w-3 h-3" />
+                                  <PixelIcon name="clock" />
                                   Last edited: {formatDate(editForm.updatedAt)}
                                 </div>
                                 {editForm.lastEditDetails && (
@@ -357,11 +360,11 @@ const AdminContent = () => {
                               />
                               <div className="flex gap-2">
                                 <Button size="sm" onClick={() => saveEditing(company.id)} className="gap-1">
-                                  <Check className="w-3 h-3" />
+                                  <PixelIcon name="check" />
                                   Save
                                 </Button>
                                 <Button size="sm" variant="outline" onClick={cancelEditing} className="gap-1">
-                                  <X className="w-3 h-3" />
+                                   <PixelIcon name="window-close" />
                                   Cancel
                                 </Button>
                               </div>
@@ -372,10 +375,10 @@ const AdminContent = () => {
                               <div className="flex items-center gap-3 min-w-0 flex-1">
                                 <img
                                   src={company.logoUrl}
-                                  alt=""
+                                   alt={`${company.name} logo`}
                                   className="w-10 h-10 rounded-lg object-contain bg-background border border-border"
                                   onError={(e) => {
-                                    e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(company.name)}&background=random`;
+                                     e.currentTarget.src = createFallbackImage(company.name);
                                   }}
                                 />
                                 <div className="min-w-0 flex-1">
@@ -399,9 +402,9 @@ const AdminContent = () => {
                                     aria-label={`Toggle ${company.name} visibility`}
                                   />
                                   {isVisible(company.id) ? (
-                                    <Eye className="w-4 h-4 text-primary" />
+                                     <PixelIcon name="eye" className="text-primary" />
                                   ) : (
-                                    <EyeOff className="w-4 h-4 text-muted-foreground" />
+                                     <PixelIcon name="eye-cross" className="text-muted-foreground" />
                                   )}
                                 </div>
                                 <Button
@@ -410,7 +413,7 @@ const AdminContent = () => {
                                   onClick={() => startEditing(company)}
                                   className="hover:bg-primary/10 transition-colors"
                                 >
-                                  <Pencil className="w-4 h-4" />
+                                   <PixelIcon name="pencil" />
                                 </Button>
                                 <Button
                                   variant="ghost"
@@ -418,7 +421,7 @@ const AdminContent = () => {
                                   onClick={() => handleDelete(company.id, company.name)}
                                   className="text-destructive hover:text-destructive hover:bg-destructive/10 transition-colors"
                                 >
-                                  <Trash2 className="w-4 h-4" />
+                                   <PixelIcon name="trash" />
                                 </Button>
                               </div>
                             </>
@@ -437,7 +440,7 @@ const AdminContent = () => {
             <Card className="max-w-2xl">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Plus className="w-5 h-5" />
+                  <PixelIcon name="plus" />
                   Add New Company
                 </CardTitle>
                 <CardDescription>Enter company details below to add it to the map</CardDescription>
@@ -496,7 +499,7 @@ const AdminContent = () => {
                         disabled={isGeocoding}
                         className="hover:bg-primary/10 transition-colors"
                       >
-                        {isGeocoding ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
+                        {isGeocoding ? <PixelIcon name="spinner" className="animate-spin" /> : <PixelIcon name="location-pin" />}
                       </Button>
                     </div>
                     {form.latitude !== 0 && (
@@ -567,9 +570,9 @@ const AdminContent = () => {
                     />
                   </div>
 
-                  <Button type="submit" className="w-full">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Company
+                  <Button type="submit" className="w-full" disabled={isSyncing}>
+                    <PixelIcon name={isSyncing ? 'spinner' : 'plus'} className={isSyncing ? 'animate-spin' : undefined} />
+                    {isSyncing ? 'Saving…' : 'Add Company'}
                   </Button>
                 </form>
               </CardContent>

@@ -25,7 +25,7 @@ export const CompanyDetail = ({ company, onBack }: CompanyDetailProps) => {
         </Button>
       </header>
       
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <article className="p-6 space-y-6">
           {/* Logo */}
           <figure className="flex justify-center">
@@ -58,7 +58,7 @@ export const CompanyDetail = ({ company, onBack }: CompanyDetailProps) => {
           {/* Address */}
           <section className="space-y-2">
             <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-               <PixelIcon name="map-marker" className="text-primary" />
+               <PixelIcon name="location-pin" className="text-primary" />
               Address
             </h2>
             <address className="text-sm text-muted-foreground pl-6 not-italic">
@@ -104,7 +104,7 @@ export const CompanyDetail = ({ company, onBack }: CompanyDetailProps) => {
           {company.alternativeFor && company.alternativeFor.length > 0 && (
             <section className="space-y-2">
               <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                 <PixelIcon name="exchange" className="text-primary" />
+                 <PixelIcon name="refresh" className="text-primary" />
                  Alternative for
               </h2>
               <div className="pl-6 flex flex-wrap gap-2">

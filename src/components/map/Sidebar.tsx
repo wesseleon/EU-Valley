@@ -88,7 +88,7 @@ export const Sidebar = ({
 
       {/* Company List */}
       <ScrollArea 
-        className="flex-1"
+        className="min-h-0 flex-1"
         onScrollCapture={handleScroll}
       >
         <ul className="p-2 space-y-1" role="list">
