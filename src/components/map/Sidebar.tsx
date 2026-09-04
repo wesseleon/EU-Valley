@@ -122,7 +122,7 @@ export const Sidebar = ({
                   <p className="font-medium text-foreground truncate">{company.name}</p>
                   <p className="text-xs text-muted-foreground truncate">{company.category}</p>
                 </div>
-                <span className="shrink-0" role="img" aria-label={`${company.country} flag`}>
+                <span className="shrink-0" title={company.country}>
                   <CountryFlag countryCode={company.countryCode} size="M" />
                 </span>
               </button>

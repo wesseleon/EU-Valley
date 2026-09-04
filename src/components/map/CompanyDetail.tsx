@@ -1,10 +1,10 @@
-import { ArrowLeft, MapPin, Globe, ExternalLink, Globe2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Company } from '@/data/companies';
 import { CountryFlag } from '@/components/ui/CountryFlag';
 import { createFallbackImage } from '@/lib/createFallbackImage';
+import { PixelIcon } from '@/components/ui/PixelIcon';
 
 interface CompanyDetailProps {
   company: Company & { alternativeFor?: string[] };
@@ -13,14 +13,14 @@ interface CompanyDetailProps {
 
 export const CompanyDetail = ({ company, onBack }: CompanyDetailProps) => {
   return (
-    <nav className="w-96 bg-card/95 backdrop-blur-lg border-r border-border flex flex-col h-full font-sans" aria-label="Company details">
+    <nav className="w-full md:w-96 bg-card/95 backdrop-blur-lg md:border-r border-border flex flex-col h-full font-sans" aria-label="Company details">
       <header className="p-4 border-b border-border">
         <Button 
           variant="outline" 
           className="gap-2 bg-background text-foreground border-border hover:bg-foreground hover:text-background transition-colors"
           onClick={onBack}
         >
-          <ArrowLeft className="w-4 h-4" />
+          <PixelIcon name="arrow-left" />
           Back to list
         </Button>
       </header>
@@ -58,7 +58,7 @@ export const CompanyDetail = ({ company, onBack }: CompanyDetailProps) => {
           {/* Address */}
           <section className="space-y-2">
             <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-primary" aria-hidden="true" />
+               <PixelIcon name="map-marker" className="text-primary" />
               Address
             </h2>
             <address className="text-sm text-muted-foreground pl-6 not-italic">
@@ -70,7 +70,7 @@ export const CompanyDetail = ({ company, onBack }: CompanyDetailProps) => {
           {/* Website */}
           <section className="space-y-2">
             <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Globe className="w-4 h-4 text-primary" aria-hidden="true" />
+               <PixelIcon name="globe" className="text-primary" />
               Website
             </h2>
             <a 
@@ -80,14 +80,14 @@ export const CompanyDetail = ({ company, onBack }: CompanyDetailProps) => {
               className="text-sm text-primary hover:text-primary/80 hover:underline flex items-center gap-1 pl-6 transition-colors"
             >
               {company.website.replace('https://www.', '').replace('https://', '').replace(/\/$/, '')}
-              <ExternalLink className="w-3 h-3" aria-hidden="true" />
+               <PixelIcon name="external-link" />
             </a>
           </section>
 
           {/* Country */}
           <section className="space-y-2">
             <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Globe2 className="w-4 h-4 text-primary" aria-hidden="true" />
+               <PixelIcon name="globe-americas" className="text-primary" />
               Country
             </h2>
             <div className="pl-6">
@@ -104,7 +104,8 @@ export const CompanyDetail = ({ company, onBack }: CompanyDetailProps) => {
           {company.alternativeFor && company.alternativeFor.length > 0 && (
             <section className="space-y-2">
               <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                🌍 Alternative for
+                 <PixelIcon name="exchange" className="text-primary" />
+                 Alternative for
               </h2>
               <div className="pl-6 flex flex-wrap gap-2">
                 {company.alternativeFor.map((competitor) => (

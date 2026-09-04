@@ -1,29 +1,18 @@
-import { useState, useEffect, createContext, useContext } from 'react';
-import { Lock, User } from 'lucide-react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { PixelIcon } from '@/components/ui/PixelIcon';
 
-const STORAGE_KEY = 'eu-valley-admin-auth';
-const SESSION_DURATION = 24 * 60 * 60 * 1000; // 24 hours
-
-// Context for logout function
-const LogoutContext = createContext<(() => void) | null>(null);
+const LogoutContext = createContext<(() => Promise<void>) | null>(null);
 
 export const useAdminLogout = () => {
   const logout = useContext(LogoutContext);
-  return logout || (() => {
-    localStorage.removeItem(STORAGE_KEY);
-    window.location.reload();
-  });
+  return logout ?? (async () => undefined);
 };
 
-interface AdminPasswordGateProps {
-  children: React.ReactNode;
-}
-
-export const AdminPasswordGate = ({ children }: AdminPasswordGateProps) => {
+export const AdminPasswordGate = ({ children }: { children: React.ReactNode }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -31,134 +20,86 @@ export const AdminPasswordGate = ({ children }: AdminPasswordGateProps) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        const { expiry } = JSON.parse(stored);
-        if (expiry > Date.now()) {
-          setIsAuthenticated(true);
-        } else {
-          localStorage.removeItem(STORAGE_KEY);
-        }
-      } catch {
-        localStorage.removeItem(STORAGE_KEY);
-      }
-    }
-    setIsLoading(false);
+    fetch('/api/admin-session', { credentials: 'same-origin' })
+      .then((response) => response.ok ? response.json() : { authenticated: false })
+      .then((data) => setIsAuthenticated(Boolean(data.authenticated)))
+      .catch(() => setIsAuthenticated(false))
+      .finally(() => setIsLoading(false));
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError('');
-
-    if (!username.trim()) {
-      setError('Username is required');
-      return;
-    }
-
+    setIsLoading(true);
     try {
       const response = await fetch('/api/admin-login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username, password }),
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username.trim(), password }),
       });
-
-      const data = await response.json();
-
-      if (data.success) {
-        const session = {
-          expiry: Date.now() + SESSION_DURATION,
-          username: username,
-        };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-        setIsAuthenticated(true);
-      } else {
-        setError('Incorrect username or password');
-        setPassword('');
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { message?: string } | null;
+        throw new Error(result?.message || 'Incorrect username or password');
       }
-    } catch (err) {
-      setError('Failed to authenticate. Please try again.');
+      setIsAuthenticated(true);
       setPassword('');
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Sign-in failed. Please try again.');
+      setPassword('');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem(STORAGE_KEY);
+  const handleLogout = async () => {
+    await fetch('/api/admin-session', { method: 'DELETE', credentials: 'same-origin' }).catch(() => undefined);
     setIsAuthenticated(false);
     setUsername('');
     setPassword('');
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-muted-foreground">Loading...</div>
-      </div>
-    );
+  if (isLoading && !isAuthenticated) {
+    return <main className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">Loading…</main>;
   }
 
   if (isAuthenticated) {
-    return (
-      <LogoutContext.Provider value={handleLogout}>
-        {children}
-      </LogoutContext.Provider>
-    );
+    return <LogoutContext.Provider value={handleLogout}>{children}</LogoutContext.Provider>;
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <main className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-            <Lock className="w-6 h-6 text-primary" />
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+            <PixelIcon name="lock" className="text-2xl text-primary" />
           </div>
           <CardTitle>Admin Access</CardTitle>
-          <CardDescription>
-            Enter your credentials to manage companies
-          </CardDescription>
+          <CardDescription>Enter your private credentials to manage companies</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="username"
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter username"
-                  className="pl-10"
-                  autoFocus
-                />
+                <PixelIcon name="user" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input id="username" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} className="pl-10" required autoFocus />
               </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
-                  className="pl-10"
-                />
+                <PixelIcon name="lock" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="pl-10" required />
               </div>
             </div>
-            {error && (
-              <p className="text-sm text-destructive">{error}</p>
-            )}
-            <Button type="submit" className="w-full">
-              Access Admin Panel
+            {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? 'Signing in…' : 'Access Admin Panel'}
             </Button>
           </form>
         </CardContent>
       </Card>
-    </div>
+    </main>
   );
 };

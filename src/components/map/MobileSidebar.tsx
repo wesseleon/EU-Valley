@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
-import { ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { PixelIcon } from '@/components/ui/PixelIcon';
 
 interface MobileSidebarProps {
   children: React.ReactNode;
@@ -49,6 +49,13 @@ export const MobileSidebar = ({ children, className }: MobileSidebarProps) => {
     setIsExpanded(prev => !prev);
   }, []);
 
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      toggleExpand();
+    }
+  };
+
   const getTransformStyle = () => {
     if (isDragging) {
       if (isExpanded) {
@@ -64,34 +71,39 @@ export const MobileSidebar = ({ children, className }: MobileSidebarProps) => {
     <div
       ref={containerRef}
       className={cn(
-        "fixed inset-x-0 bottom-0 z-50 bg-card backdrop-blur-lg rounded-t-2xl shadow-xl transition-transform duration-300 ease-out md:hidden border-t border-border",
+        "fixed inset-x-0 bottom-0 z-50 bg-card backdrop-blur-lg rounded-t-lg shadow-xl transition-transform duration-300 ease-out md:hidden border-t border-border",
         className
       )}
       style={{
         transform: getTransformStyle(),
-        maxHeight: '85vh',
+        height: '85dvh',
       }}
     >
       {/* Drag handle */}
       <div
-        className="flex flex-col items-center py-3 cursor-grab active:cursor-grabbing touch-none"
+        className="flex h-16 flex-col items-center justify-center cursor-grab active:cursor-grabbing touch-none"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onClick={toggleExpand}
+        onKeyDown={handleKeyDown}
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
+        aria-label={isExpanded ? 'Collapse company list' : 'Expand company list'}
       >
         <div className="w-10 h-1 bg-muted-foreground/30 rounded-full mb-1" />
         {isExpanded ? (
-          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+          <PixelIcon name="arrow-down" className="text-muted-foreground" />
         ) : (
-          <ChevronUp className="w-4 h-4 text-muted-foreground" />
+          <PixelIcon name="arrow-up" className="text-muted-foreground" />
         )}
       </div>
       
       {/* Content with scrolling enabled - use overflow-auto for touch scrolling */}
       <div 
         className="overflow-y-auto overscroll-contain"
-        style={{ maxHeight: 'calc(85vh - 3rem)' }}
+        style={{ height: 'calc(85dvh - 4rem)' }}
       >
         {children}
       </div>
