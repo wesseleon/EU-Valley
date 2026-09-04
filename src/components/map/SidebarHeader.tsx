@@ -1,10 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
-import { Search, Globe, Linkedin, Globe2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { countries } from '@/data/companies';
 import { cn } from '@/lib/utils';
+import { PixelIcon } from '@/components/ui/PixelIcon';
 
 interface SidebarHeaderProps {
   searchQuery: string;
@@ -39,9 +38,9 @@ export const SidebarHeader = ({
         )}
       >
         {/* Cover Image */}
-        <div className="relative h-32 rounded-lg overflow-hidden bg-gradient-to-br from-primary/20 via-background to-primary/10">
+        <div className="relative h-32 rounded-lg overflow-hidden bg-primary/10">
           <div className="absolute inset-0 flex items-center justify-center">
-            <Globe2 className="w-16 h-16 text-primary/30" />
+            <PixelIcon name="globe-americas" className="text-6xl text-primary/30" />
           </div>
         </div>
 
@@ -62,7 +61,7 @@ export const SidebarHeader = ({
             asChild
           >
             <a href="https://www.leeeon.studio/" target="_blank" rel="noopener noreferrer">
-              <Globe className="w-4 h-4" aria-hidden="true" />
+               <PixelIcon name="globe" />
               Website
             </a>
           </Button>
@@ -73,7 +72,7 @@ export const SidebarHeader = ({
             asChild
           >
             <a href="https://linkedin.com/in/wlb02/" target="_blank" rel="noopener noreferrer">
-              <Linkedin className="w-4 h-4" aria-hidden="true" />
+               <PixelIcon name="linkedin" />
               LinkedIn
             </a>
           </Button>
@@ -83,7 +82,7 @@ export const SidebarHeader = ({
       {/* Always visible: Search and Filters */}
       <div className="space-y-4">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <PixelIcon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search companies..."
             value={searchQuery}

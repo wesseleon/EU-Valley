@@ -1,8 +1,15 @@
-import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Company } from '@/data/companies';
-import { createFallbackImage, PIN_SIZE, PIN_PADDING, PIN_BORDER_WIDTH, PIN_BORDER_RADIUS, PIN_INNER_RADIUS } from '@/lib/createFallbackImage';
+import {
+  createFallbackImage,
+  PIN_BORDER_RADIUS,
+  PIN_BORDER_WIDTH,
+  PIN_INNER_RADIUS,
+  PIN_PADDING,
+  PIN_SIZE,
+} from '@/lib/createFallbackImage';
 
 interface MapContainerProps {
   companies: Company[];
@@ -12,41 +19,60 @@ interface MapContainerProps {
   viewZoom: number;
 }
 
-// Pin sizing constants
-const PIN_SIZE = 48; // 75% of original 64px
-const PIN_BORDER_WIDTH = 1; // Quarter of original 4px
-const PIN_BORDER_RADIUS = 6;
-const PIN_INNER_RADIUS = 4;
-const PIN_PADDING = 2;
+const SOURCE_ID = 'companies';
+const PIN_LAYER_ID = 'company-pins';
+const LABEL_LAYER_ID = 'company-labels';
 
-// Generate fallback image as data URL
-const createFallbackImage = (name: string): string => {
+const drawPin = (
+  source: CanvasImageSource,
+  borderColor: string,
+): ImageData | null => {
   const canvas = document.createElement('canvas');
   canvas.width = PIN_SIZE;
   canvas.height = PIN_SIZE;
-  const ctx = canvas.getContext('2d')!;
-  
-  // Background
-  const hue = Math.abs(name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % 360;
-  ctx.fillStyle = `hsl(${hue}, 60%, 50%)`;
-  ctx.beginPath();
-  ctx.roundRect(PIN_PADDING, PIN_PADDING, PIN_SIZE - PIN_PADDING * 2, PIN_SIZE - PIN_PADDING * 2, PIN_INNER_RADIUS);
-  ctx.fill();
-  
-  // Border
-  ctx.strokeStyle = 'white';
-  ctx.lineWidth = PIN_BORDER_WIDTH;
-  ctx.stroke();
-  
-  // Text
-  ctx.fillStyle = 'white';
-  ctx.font = `500 18px "TASA Orbiter", sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(name.charAt(0).toUpperCase(), PIN_SIZE / 2, PIN_SIZE / 2);
-  
-  return canvas.toDataURL();
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+
+  context.fillStyle = borderColor;
+  context.beginPath();
+  context.roundRect(0, 0, PIN_SIZE, PIN_SIZE, PIN_BORDER_RADIUS);
+  context.fill();
+  context.save();
+  context.beginPath();
+  context.roundRect(
+    PIN_PADDING,
+    PIN_PADDING,
+    PIN_SIZE - PIN_PADDING * 2,
+    PIN_SIZE - PIN_PADDING * 2,
+    PIN_INNER_RADIUS,
+  );
+  context.clip();
+  context.fillStyle = '#FFFFFF';
+  context.fillRect(PIN_PADDING, PIN_PADDING, PIN_SIZE - PIN_PADDING * 2, PIN_SIZE - PIN_PADDING * 2);
+  context.drawImage(source, PIN_PADDING, PIN_PADDING, PIN_SIZE - PIN_PADDING * 2, PIN_SIZE - PIN_PADDING * 2);
+  context.restore();
+  context.strokeStyle = borderColor;
+  context.lineWidth = PIN_BORDER_WIDTH;
+  context.beginPath();
+  context.roundRect(
+    PIN_BORDER_WIDTH / 2,
+    PIN_BORDER_WIDTH / 2,
+    PIN_SIZE - PIN_BORDER_WIDTH,
+    PIN_SIZE - PIN_BORDER_WIDTH,
+    PIN_BORDER_RADIUS,
+  );
+  context.stroke();
+
+  return context.getImageData(0, 0, PIN_SIZE, PIN_SIZE);
 };
+
+const loadImage = (url: string) => new Promise<HTMLImageElement>((resolve, reject) => {
+  const image = new Image();
+  image.crossOrigin = 'anonymous';
+  image.onload = () => resolve(image);
+  image.onerror = reject;
+  image.src = url;
+});
 
 export const MapContainer = ({
   companies,
@@ -55,149 +81,106 @@ export const MapContainer = ({
   viewCenter,
   viewZoom,
 }: MapContainerProps) => {
-  const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<maplibregl.Map | null>(null);
-  const [mapLoaded, setMapLoaded] = useState(false);
-  const loadedImages = useRef<Set<string>>(new Set());
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const companiesRef = useRef(companies);
+  const selectionHandlerRef = useRef(onCompanySelect);
+  const hoveredIdRef = useRef<string | number | null>(null);
+  const selectedIdRef = useRef<string | number | null>(null);
+  const loadedLogosRef = useRef(new Set<string>());
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  // Create GeoJSON from companies
-  const geojsonData = useMemo(() => ({
-    type: 'FeatureCollection' as const,
+  companiesRef.current = companies;
+  selectionHandlerRef.current = onCompanySelect;
+
+  const geojsonData = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(() => ({
+    type: 'FeatureCollection',
     features: companies.map((company) => ({
-      type: 'Feature' as const,
-      geometry: {
-        type: 'Point' as const,
-        coordinates: [company.longitude, company.latitude],
-      },
+      type: 'Feature',
+      id: company.id,
+      geometry: { type: 'Point', coordinates: [company.longitude, company.latitude] },
       properties: {
         id: company.id,
         name: company.name,
-        category: company.category,
-        logoUrl: company.logoUrl,
-        city: company.city,
-        country: company.country,
         imageId: `logo-${company.id}`,
+        hoverImageId: `logo-${company.id}-hover`,
       },
     })),
   }), [companies]);
 
-  // Load a single company logo into the map
-  const loadCompanyLogo = useCallback((company: Company, mapInstance: maplibregl.Map) => {
+  const registerLogo = async (company: Company, map: maplibregl.Map) => {
     const imageId = `logo-${company.id}`;
-    if (loadedImages.current.has(imageId) || mapInstance.hasImage(imageId)) {
-      return;
+    if (loadedLogosRef.current.has(imageId) || map.hasImage(imageId)) return;
+    loadedLogosRef.current.add(imageId);
+
+    let image: HTMLImageElement;
+    try {
+      image = await loadImage(company.logoUrl || createFallbackImage(company.name));
+    } catch {
+      image = await loadImage(createFallbackImage(company.name));
     }
 
-    loadedImages.current.add(imageId);
+    if (!mapRef.current) return;
+    const normal = drawPin(image, '#FFFFFF');
+    const hover = drawPin(image, '#173F8A');
+    if (normal && !map.hasImage(imageId)) map.addImage(imageId, normal);
+    if (hover && !map.hasImage(`${imageId}-hover`)) map.addImage(`${imageId}-hover`, hover);
+  };
 
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    
-    const applyImage = (imgSrc: HTMLImageElement | HTMLCanvasElement) => {
-      if (!mapInstance.hasImage(imageId)) {
-        const canvas = document.createElement('canvas');
-        canvas.width = PIN_SIZE;
-        canvas.height = PIN_SIZE;
-        const ctx = canvas.getContext('2d')!;
-        
-        // White background with rounded corners (outer)
-        ctx.fillStyle = 'white';
-        ctx.beginPath();
-        ctx.roundRect(0, 0, PIN_SIZE, PIN_SIZE, PIN_BORDER_RADIUS);
-        ctx.fill();
-        
-        // Clip for logo (inner, nested radius)
-        ctx.save();
-        ctx.beginPath();
-        ctx.roundRect(PIN_PADDING, PIN_PADDING, PIN_SIZE - PIN_PADDING * 2, PIN_SIZE - PIN_PADDING * 2, PIN_INNER_RADIUS);
-        ctx.clip();
-        
-        // Draw logo
-        ctx.drawImage(imgSrc, PIN_PADDING, PIN_PADDING, PIN_SIZE - PIN_PADDING * 2, PIN_SIZE - PIN_PADDING * 2);
-        ctx.restore();
-        
-        // Border
-        ctx.strokeStyle = 'white';
-        ctx.lineWidth = PIN_BORDER_WIDTH;
-        ctx.beginPath();
-        ctx.roundRect(PIN_BORDER_WIDTH / 2, PIN_BORDER_WIDTH / 2, PIN_SIZE - PIN_BORDER_WIDTH, PIN_SIZE - PIN_BORDER_WIDTH, PIN_BORDER_RADIUS);
-        ctx.stroke();
-        
-        mapInstance.addImage(imageId, { width: PIN_SIZE, height: PIN_SIZE, data: ctx.getImageData(0, 0, PIN_SIZE, PIN_SIZE).data });
-        
-        // Refresh source
-        const source = mapInstance.getSource('companies') as maplibregl.GeoJSONSource;
-        if (source) {
-          source.setData(geojsonData);
-        }
-      }
-    };
-    
-    img.onload = () => applyImage(img);
-    img.onerror = () => {
-      // Use fallback
-      const fallbackImg = new Image();
-      fallbackImg.onload = () => applyImage(fallbackImg);
-      fallbackImg.src = createFallbackImage(company.name);
-    };
-    
-    img.src = company.logoUrl || createFallbackImage(company.name);
-  }, [geojsonData]);
-
-  // Initialize map
   useEffect(() => {
-    if (!mapContainer.current || map.current) return;
+    if (!containerRef.current || mapRef.current) return;
 
-    map.current = new maplibregl.Map({
-      container: mapContainer.current,
+    const map = new maplibregl.Map({
+      container: containerRef.current,
       style: 'https://api.maptiler.com/maps/019bf1f1-a9e6-76b9-a536-7aac425452ca/style.json?key=OXErs5ulKuJgqbESSXXz',
       center: viewCenter,
       zoom: viewZoom,
       minZoom: 2,
       maxZoom: 18,
-      attributionControl: false, // Disable default attribution
+      attributionControl: false,
     });
+    mapRef.current = map;
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
+    map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
 
-    // Add compact attribution control
-    map.current.addControl(new maplibregl.AttributionControl({
-      compact: true, // This collapses the attribution by default
-    }), 'bottom-right');
+    map.on('load', async () => {
+      await Promise.all(companiesRef.current.map((company) => registerLogo(company, map)));
+      if (!mapRef.current) return;
 
-    map.current.addControl(new maplibregl.NavigationControl(), 'bottom-right');
-
-    map.current.on('load', () => {
-      if (!map.current) return;
-
-      // Add GeoJSON source
-      map.current.addSource('companies', {
-        type: 'geojson',
-        data: geojsonData,
-        cluster: false,
-      });
-
-      // Add symbol layer for logo pins
-      map.current.addLayer({
-        id: 'company-pins',
+      const initialData: GeoJSON.FeatureCollection<GeoJSON.Point> = {
+        type: 'FeatureCollection',
+        features: companiesRef.current.map((company) => ({
+          type: 'Feature',
+          id: company.id,
+          geometry: { type: 'Point', coordinates: [company.longitude, company.latitude] },
+          properties: {
+            id: company.id,
+            name: company.name,
+            imageId: `logo-${company.id}`,
+            hoverImageId: `logo-${company.id}-hover`,
+          },
+        })),
+      };
+      map.addSource(SOURCE_ID, { type: 'geojson', data: initialData });
+      map.addLayer({
+        id: PIN_LAYER_ID,
         type: 'symbol',
-        source: 'companies',
+        source: SOURCE_ID,
         layout: {
-          'icon-image': ['get', 'imageId'],
+          'icon-image': ['case', ['boolean', ['feature-state', 'active'], false], ['get', 'hoverImageId'], ['get', 'imageId']],
           'icon-size': [
-            'interpolate', ['linear'], ['zoom'],
-            2, 0.4,
-            8, 0.6,
-            14, 0.8
+            '*',
+            ['interpolate', ['linear'], ['zoom'], 2, 0.4, 8, 0.6, 14, 0.8],
+            ['case', ['boolean', ['feature-state', 'active'], false], 1.1, 1],
           ],
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
         },
       });
-
-      // Add labels layer
-      map.current.addLayer({
-        id: 'company-labels',
+      map.addLayer({
+        id: LABEL_LAYER_ID,
         type: 'symbol',
-        source: 'companies',
+        source: SOURCE_ID,
         minzoom: 8,
         layout: {
           'text-field': ['get', 'name'],
@@ -209,109 +192,83 @@ export const MapContainer = ({
           'text-font': ['Noto Sans Bold'],
         },
         paint: {
-          'text-color': '#1a1a1a',
-          'text-halo-color': '#ffffff',
-          'text-halo-width': 0.8,
+          'text-color': '#1A1A1A',
+          'text-halo-color': '#FFFFFF',
+          'text-halo-width': 0.6,
         },
-      })
-
-      // Load all company logos
-      companies.forEach(company => {
-        loadCompanyLogo(company, map.current!);
       });
-
-      setMapLoaded(true);
+      setIsLoaded(true);
     });
 
-    // Click handler for both layers - zoom to pin and select
-    ['company-pins', 'company-labels'].forEach(layerId => {
-      map.current!.on('click', layerId, (e) => {
-        if (!e.features || e.features.length === 0) return;
-        const feature = e.features[0];
-        const companyId = feature.properties?.id;
-        const company = companies.find(c => c.id === companyId);
-        if (company) {
-          // Zoom to the clicked pin
-          map.current?.flyTo({
-            center: [company.longitude, company.latitude],
-            zoom: 14,
-            duration: 1500,
-          });
-          onCompanySelect(company);
-        }
-      });
-    });
+    const selectFeature = (event: maplibregl.MapLayerMouseEvent) => {
+      const companyId = event.features?.[0]?.properties?.id;
+      const company = companiesRef.current.find((candidate) => candidate.id === companyId);
+      if (company) selectionHandlerRef.current(company);
+    };
 
-    // Hover effects - change cursor only (border changes handled via image regeneration would be complex)
-    map.current.on('mouseenter', 'company-pins', () => {
-      if (map.current) {
-        map.current.getCanvas().style.cursor = 'pointer';
+    const setHoveredFeature = (event: maplibregl.MapLayerMouseEvent) => {
+      const featureId = event.features?.[0]?.id;
+      map.getCanvas().style.cursor = 'pointer';
+      if (hoveredIdRef.current !== null && hoveredIdRef.current !== selectedIdRef.current) {
+        map.setFeatureState({ source: SOURCE_ID, id: hoveredIdRef.current }, { active: false });
       }
-    });
-
-    map.current.on('mouseleave', 'company-pins', () => {
-      if (map.current) {
-        map.current.getCanvas().style.cursor = '';
+      if (featureId !== undefined) {
+        hoveredIdRef.current = featureId;
+        map.setFeatureState({ source: SOURCE_ID, id: featureId }, { active: true });
       }
-    });
+    };
+
+    const clearHoveredFeature = () => {
+      map.getCanvas().style.cursor = '';
+      if (hoveredIdRef.current !== null && hoveredIdRef.current !== selectedIdRef.current) {
+        map.setFeatureState({ source: SOURCE_ID, id: hoveredIdRef.current }, { active: false });
+      }
+      hoveredIdRef.current = null;
+    };
+
+    [PIN_LAYER_ID, LABEL_LAYER_ID].forEach((layerId) => map.on('click', layerId, selectFeature));
+    map.on('mousemove', PIN_LAYER_ID, setHoveredFeature);
+    map.on('mouseleave', PIN_LAYER_ID, clearHoveredFeature);
 
     return () => {
-      map.current?.remove();
-      map.current = null;
-      loadedImages.current.clear();
+      map.remove();
+      mapRef.current = null;
+      loadedLogosRef.current.clear();
     };
   }, []);
 
-  // Update GeoJSON data and load new logos when companies change
   useEffect(() => {
-    if (!map.current || !mapLoaded) return;
-
-    // Load logos for any new companies
-    companies.forEach(company => {
-      loadCompanyLogo(company, map.current!);
+    const map = mapRef.current;
+    if (!map || !isLoaded) return;
+    void Promise.all(companies.map((company) => registerLogo(company, map))).then(() => {
+      const source = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+      source?.setData(geojsonData);
     });
+  }, [companies, geojsonData, isLoaded]);
 
-    const source = map.current.getSource('companies') as maplibregl.GeoJSONSource;
-    if (source) {
-      source.setData(geojsonData);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isLoaded) return;
+
+    if (selectedIdRef.current !== null) {
+      map.setFeatureState({ source: SOURCE_ID, id: selectedIdRef.current }, { active: false });
     }
-  }, [geojsonData, mapLoaded, companies, loadCompanyLogo]);
+    selectedIdRef.current = selectedCompany?.id ?? null;
 
-  // Fly to selected company
-  useEffect(() => {
-    if (!map.current || !selectedCompany) return;
-
-    map.current.flyTo({
-      center: [selectedCompany.longitude, selectedCompany.latitude],
-      zoom: 14,
-      duration: 1500,
-    });
-  }, [selectedCompany]);
-
-  // Update view when center/zoom changes (not from selection)
-  useEffect(() => {
-    if (!map.current || selectedCompany) return;
-
-    map.current.flyTo({
-      center: viewCenter,
-      zoom: viewZoom,
-      duration: 1000,
-    });
-  }, [viewCenter, viewZoom]);
+    if (selectedCompany) {
+      map.setFeatureState({ source: SOURCE_ID, id: selectedCompany.id }, { active: true });
+      map.flyTo({ center: [selectedCompany.longitude, selectedCompany.latitude], zoom: 14, duration: 1200 });
+    }
+  }, [selectedCompany, isLoaded]);
 
   useEffect(() => {
-  if (!map.current || !selectedCompany) return;
-  // Ensure map exists and company has coords
-  map.current.flyTo({
-    center: [selectedCompany.longitude, selectedCompany.latitude],
-    zoom: 14,
-    duration: 1500,
-  });
-  }, [selectedCompany]);
+    if (!mapRef.current || !isLoaded || selectedCompany) return;
+    mapRef.current.flyTo({ center: viewCenter, zoom: viewZoom, duration: 900 });
+  }, [viewCenter, viewZoom, selectedCompany, isLoaded]);
 
   return (
-    <div className="relative w-full h-full">
-      <div ref={mapContainer} className="w-full h-full" />
-    </div>
+    <section className="relative h-full w-full" aria-label={`Interactive company map with ${companies.length} locations`}>
+      <div ref={containerRef} className="h-full w-full" />
+    </section>
   );
 };

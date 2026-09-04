@@ -12,6 +12,7 @@ export interface Company {
   website: string;
   logoUrl: string;
   category: string;
+  alternativeFor?: string[];
 }
 
 // --- Utilities ---
