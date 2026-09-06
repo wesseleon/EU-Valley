@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Company, companies as defaultCompanies } from '@/data/companies';
+import { fetchJson } from '@/lib/apiClient';
 
 export interface StoredCompany extends Company {
   alternativeFor?: string[];
@@ -14,8 +15,8 @@ interface CompanyData {
   lastUpdated: string | null;
 }
 
-const STORAGE_KEY = 'eu-valley-companies';
-const HIDDEN_KEY = 'eu-valley-hidden';
+const STORAGE_KEY = 'eu-valley-companies-v2';
+const HIDDEN_KEY = 'eu-valley-hidden-v2';
 const SYNC_INTERVAL = 15_000;
 
 const migrateDefaults = (): StoredCompany[] => {
@@ -27,7 +28,7 @@ const readCache = () => {
   try {
     const companies = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null');
     const hiddenIds = JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? '[]');
-    if (Array.isArray(companies) && Array.isArray(hiddenIds)) {
+    if (Array.isArray(companies) && companies.length > 0 && Array.isArray(hiddenIds)) {
       return { companies: companies as StoredCompany[], hiddenIds: hiddenIds as string[] };
     }
   } catch {
@@ -43,6 +44,8 @@ export const useCompanyStorage = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [isLocalOnly, setIsLocalOnly] = useState(false);
+  const localOnlyRef = useRef(false);
   const companiesRef = useRef<StoredCompany[]>([]);
   const hiddenRef = useRef(new Set<string>());
   const isSavingRef = useRef(false);
@@ -59,34 +62,48 @@ export const useCompanyStorage = () => {
 
   const fetchFromApi = useCallback(async () => {
     if (isSavingRef.current) return false;
-    try {
-      const response = await fetch('/api/companies', { cache: 'no-store', credentials: 'same-origin' });
-      if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) return false;
-      const data = await response.json() as CompanyData;
-      if (!Array.isArray(data.companies) || !Array.isArray(data.hiddenIds)) return false;
-      if (data.companies.length === 0 && !data.lastUpdated) return false;
-      applyLocalState(data.companies, new Set(data.hiddenIds));
-      setLastSyncTime(data.lastUpdated ? new Date(data.lastUpdated) : new Date());
-      setSyncError(null);
-      return true;
-    } catch {
+    const result = await fetchJson<CompanyData>('/api/companies', { cache: 'no-store' });
+    if (!result) {
+      // No live backend (e.g. the preview): keep working with browser storage.
+      localOnlyRef.current = true;
+      setIsLocalOnly(true);
       return false;
     }
+    localOnlyRef.current = false;
+    setIsLocalOnly(false);
+    const data = result.data;
+    if (!result.ok || !data || !Array.isArray(data.companies) || !Array.isArray(data.hiddenIds)) return false;
+    if (data.companies.length === 0 && !data.lastUpdated) return false;
+    applyLocalState(data.companies, new Set(data.hiddenIds));
+    setLastSyncTime(data.lastUpdated ? new Date(data.lastUpdated) : new Date());
+    setSyncError(null);
+    return true;
   }, [applyLocalState]);
 
   const saveSnapshot = useCallback(async (companies: StoredCompany[], hidden: Set<string>) => {
+    if (localOnlyRef.current) {
+      setLastSyncTime(new Date());
+      setSyncError(null);
+      return true;
+    }
     isSavingRef.current = true;
     setIsSyncing(true);
     try {
-      const response = await fetch('/api/companies', {
+      const result = await fetchJson<{ lastUpdated?: string }>('/api/companies', {
         method: 'POST',
-        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ companies, hiddenIds: Array.from(hidden) }),
       });
-      if (!response.ok) throw new Error(response.status === 401 ? 'Your admin session has expired.' : 'Changes could not be saved.');
-      const result = await response.json() as { lastUpdated?: string };
-      setLastSyncTime(result.lastUpdated ? new Date(result.lastUpdated) : new Date());
+      if (!result) {
+        localOnlyRef.current = true;
+        setIsLocalOnly(true);
+        setSyncError(null);
+        return true;
+      }
+      if (!result.ok) {
+        throw new Error(result.status === 401 ? 'Your admin session has expired.' : 'Changes could not be saved.');
+      }
+      setLastSyncTime(result.data?.lastUpdated ? new Date(result.data.lastUpdated) : new Date());
       setSyncError(null);
       return true;
     } catch (error) {
@@ -194,6 +211,7 @@ export const useCompanyStorage = () => {
     isSyncing,
     lastSyncTime,
     syncError,
+    isLocalOnly,
     syncNow: fetchFromApi,
   };
 };
