@@ -154,6 +154,7 @@ export const MapContainer = ({
       attributionControl: false,
     });
     mapRef.current = map;
+    (window as unknown as Record<string, unknown>).__euMap = map;
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
     map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
 
