@@ -93,11 +93,33 @@ export const MapContainer = ({
   companiesRef.current = companies;
   selectionHandlerRef.current = onCompanySelect;
 
+  const featureIdsRef = useRef(new Map<string, number>());
+
+  const buildFeatureCollection = (items: Company[]): GeoJSON.FeatureCollection<GeoJSON.Point> => {
+    const ids = new Map<string, number>();
+    items.forEach((company, index) => ids.set(company.id, index + 1));
+    featureIdsRef.current = ids;
+    return {
+      type: 'FeatureCollection',
+      features: items.map((company) => ({
+        type: 'Feature',
+        id: ids.get(company.id) as number,
+        geometry: { type: 'Point', coordinates: [company.longitude, company.latitude] },
+        properties: {
+          id: company.id,
+          name: company.name,
+          imageId: `logo-${company.id}`,
+          hoverImageId: `logo-${company.id}-hover`,
+        },
+      })),
+    };
+  };
+
   const geojsonData = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(() => ({
     type: 'FeatureCollection',
-    features: companies.map((company) => ({
+    features: companies.map((company, index) => ({
       type: 'Feature',
-      id: company.id,
+      id: index + 1,
       geometry: { type: 'Point', coordinates: [company.longitude, company.latitude] },
       properties: {
         id: company.id,
@@ -113,11 +135,15 @@ export const MapContainer = ({
     if (loadedLogosRef.current.has(imageId) || map.hasImage(imageId)) return;
     loadedLogosRef.current.add(imageId);
 
-    let image: HTMLImageElement;
+    let image: HTMLImageElement | null = null;
     try {
       image = await loadImage(company.logoUrl || createFallbackImage(company.name));
     } catch {
-      image = await loadImage(createFallbackImage(company.name));
+      image = await loadImage(createFallbackImage(company.name)).catch(() => null);
+    }
+    if (!image) {
+      loadedLogosRef.current.delete(imageId);
+      return;
     }
 
     if (!mapRef.current) return;
@@ -143,25 +169,8 @@ export const MapContainer = ({
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
     map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
 
-    map.on('load', async () => {
-      await Promise.all(companiesRef.current.map((company) => registerLogo(company, map)));
-      if (!mapRef.current) return;
-
-      const initialData: GeoJSON.FeatureCollection<GeoJSON.Point> = {
-        type: 'FeatureCollection',
-        features: companiesRef.current.map((company) => ({
-          type: 'Feature',
-          id: company.id,
-          geometry: { type: 'Point', coordinates: [company.longitude, company.latitude] },
-          properties: {
-            id: company.id,
-            name: company.name,
-            imageId: `logo-${company.id}`,
-            hoverImageId: `logo-${company.id}-hover`,
-          },
-        })),
-      };
-      map.addSource(SOURCE_ID, { type: 'geojson', data: initialData });
+    map.on('load', () => {
+      map.addSource(SOURCE_ID, { type: 'geojson', data: buildFeatureCollection(companiesRef.current) });
       map.addLayer({
         id: PIN_LAYER_ID,
         type: 'symbol',
@@ -198,6 +207,14 @@ export const MapContainer = ({
         },
       });
       setIsLoaded(true);
+      // Logos load in the background so pins appear immediately.
+      void Promise.all(companiesRef.current.map((company) => registerLogo(company, map)));
+    });
+
+    // Keeps MapLibre quiet while a logo is still being prepared.
+    map.on('styleimagemissing', (event) => {
+      if (map.hasImage(event.id)) return;
+      map.addImage(event.id, { width: 1, height: 1, data: new Uint8Array(4) });
     });
 
     const selectFeature = (event: maplibregl.MapLayerMouseEvent) => {
@@ -242,7 +259,7 @@ export const MapContainer = ({
     if (!map || !isLoaded) return;
     void Promise.all(companies.map((company) => registerLogo(company, map))).then(() => {
       const source = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
-      source?.setData(geojsonData);
+      source?.setData(buildFeatureCollection(companies));
     });
   }, [companies, geojsonData, isLoaded]);
 
@@ -253,10 +270,11 @@ export const MapContainer = ({
     if (selectedIdRef.current !== null) {
       map.setFeatureState({ source: SOURCE_ID, id: selectedIdRef.current }, { active: false });
     }
-    selectedIdRef.current = selectedCompany?.id ?? null;
+    selectedIdRef.current = selectedCompany ? featureIdsRef.current.get(selectedCompany.id) ?? null : null;
 
     if (selectedCompany) {
-      map.setFeatureState({ source: SOURCE_ID, id: selectedCompany.id }, { active: true });
+      const featureId = featureIdsRef.current.get(selectedCompany.id);
+      if (featureId !== undefined) map.setFeatureState({ source: SOURCE_ID, id: featureId }, { active: true });
       map.flyTo({ center: [selectedCompany.longitude, selectedCompany.latitude], zoom: 14, duration: 1200 });
     }
   }, [selectedCompany, isLoaded]);
