@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Company } from '@/data/companies';
@@ -21,7 +21,9 @@ interface MapContainerProps {
 
 const SOURCE_ID = 'companies';
 const PIN_LAYER_ID = 'company-pins';
+const ACTIVE_LAYER_ID = 'company-pins-active';
 const LABEL_LAYER_ID = 'company-labels';
+const NO_ACTIVE_PIN: maplibregl.FilterSpecification = ['==', ['get', 'id'], '__none__'];
 
 const drawPin = (
   source: CanvasImageSource,
@@ -85,39 +87,51 @@ export const MapContainer = ({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const companiesRef = useRef(companies);
   const selectionHandlerRef = useRef(onCompanySelect);
-  const hoveredIdRef = useRef<string | number | null>(null);
-  const selectedIdRef = useRef<string | number | null>(null);
+  const hoveredIdRef = useRef<string | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+  const activePinUpdaterRef = useRef<(() => void) | null>(null);
   const loadedLogosRef = useRef(new Set<string>());
   const [isLoaded, setIsLoaded] = useState(false);
 
   companiesRef.current = companies;
   selectionHandlerRef.current = onCompanySelect;
 
-  const geojsonData = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(() => ({
-    type: 'FeatureCollection',
-    features: companies.map((company) => ({
-      type: 'Feature',
-      id: company.id,
-      geometry: { type: 'Point', coordinates: [company.longitude, company.latitude] },
-      properties: {
-        id: company.id,
-        name: company.name,
-        imageId: `logo-${company.id}`,
-        hoverImageId: `logo-${company.id}-hover`,
-      },
-    })),
-  }), [companies]);
+  const featureIdsRef = useRef(new Map<string, number>());
+
+  const buildFeatureCollection = (items: Company[]): GeoJSON.FeatureCollection<GeoJSON.Point> => {
+    const ids = new Map<string, number>();
+    items.forEach((company, index) => ids.set(company.id, index + 1));
+    featureIdsRef.current = ids;
+    return {
+      type: 'FeatureCollection',
+      features: items.map((company) => ({
+        type: 'Feature',
+        id: ids.get(company.id) as number,
+        geometry: { type: 'Point', coordinates: [company.longitude, company.latitude] },
+        properties: {
+          id: company.id,
+          name: company.name,
+          imageId: `logo-${company.id}`,
+          hoverImageId: `logo-${company.id}-hover`,
+        },
+      })),
+    };
+  };
 
   const registerLogo = async (company: Company, map: maplibregl.Map) => {
     const imageId = `logo-${company.id}`;
     if (loadedLogosRef.current.has(imageId) || map.hasImage(imageId)) return;
     loadedLogosRef.current.add(imageId);
 
-    let image: HTMLImageElement;
+    let image: HTMLImageElement | null = null;
     try {
       image = await loadImage(company.logoUrl || createFallbackImage(company.name));
     } catch {
-      image = await loadImage(createFallbackImage(company.name));
+      image = await loadImage(createFallbackImage(company.name)).catch(() => null);
+    }
+    if (!image) {
+      loadedLogosRef.current.delete(imageId);
+      return;
     }
 
     if (!mapRef.current) return;
@@ -140,39 +154,32 @@ export const MapContainer = ({
       attributionControl: false,
     });
     mapRef.current = map;
+    (window as unknown as Record<string, unknown>).__euMap = map;
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
     map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
 
-    map.on('load', async () => {
-      await Promise.all(companiesRef.current.map((company) => registerLogo(company, map)));
-      if (!mapRef.current) return;
-
-      const initialData: GeoJSON.FeatureCollection<GeoJSON.Point> = {
-        type: 'FeatureCollection',
-        features: companiesRef.current.map((company) => ({
-          type: 'Feature',
-          id: company.id,
-          geometry: { type: 'Point', coordinates: [company.longitude, company.latitude] },
-          properties: {
-            id: company.id,
-            name: company.name,
-            imageId: `logo-${company.id}`,
-            hoverImageId: `logo-${company.id}-hover`,
-          },
-        })),
-      };
-      map.addSource(SOURCE_ID, { type: 'geojson', data: initialData });
+    map.on('load', () => {
+      map.addSource(SOURCE_ID, { type: 'geojson', data: buildFeatureCollection(companiesRef.current) });
       map.addLayer({
         id: PIN_LAYER_ID,
         type: 'symbol',
         source: SOURCE_ID,
         layout: {
-          'icon-image': ['case', ['boolean', ['feature-state', 'active'], false], ['get', 'hoverImageId'], ['get', 'imageId']],
-          'icon-size': [
-            '*',
-            ['interpolate', ['linear'], ['zoom'], 2, 0.4, 8, 0.6, 14, 0.8],
-            ['case', ['boolean', ['feature-state', 'active'], false], 1.1, 1],
-          ],
+          'icon-image': ['get', 'imageId'],
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 2, 0.4, 8, 0.6, 14, 0.8],
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+        },
+      });
+      // Hovered/selected pin renders on top with the darker border and a slight scale-up.
+      map.addLayer({
+        id: ACTIVE_LAYER_ID,
+        type: 'symbol',
+        source: SOURCE_ID,
+        filter: NO_ACTIVE_PIN,
+        layout: {
+          'icon-image': ['get', 'hoverImageId'],
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 2, 0.46, 8, 0.69, 14, 0.92],
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
         },
@@ -198,6 +205,14 @@ export const MapContainer = ({
         },
       });
       setIsLoaded(true);
+      // Logos load in the background so pins appear immediately.
+      void Promise.all(companiesRef.current.map((company) => registerLogo(company, map)));
+    });
+
+    // Keeps MapLibre quiet while a logo is still being prepared.
+    map.on('styleimagemissing', (event) => {
+      if (map.hasImage(event.id)) return;
+      map.addImage(event.id, { width: 1, height: 1, data: new Uint8Array(4) });
     });
 
     const selectFeature = (event: maplibregl.MapLayerMouseEvent) => {
@@ -206,24 +221,23 @@ export const MapContainer = ({
       if (company) selectionHandlerRef.current(company);
     };
 
+    const applyActivePin = () => {
+      const activeId = hoveredIdRef.current ?? selectedIdRef.current;
+      if (!map.getLayer(ACTIVE_LAYER_ID)) return;
+      map.setFilter(ACTIVE_LAYER_ID, activeId ? ['==', ['get', 'id'], activeId] : NO_ACTIVE_PIN);
+    };
+    activePinUpdaterRef.current = applyActivePin;
+
     const setHoveredFeature = (event: maplibregl.MapLayerMouseEvent) => {
-      const featureId = event.features?.[0]?.id;
       map.getCanvas().style.cursor = 'pointer';
-      if (hoveredIdRef.current !== null && hoveredIdRef.current !== selectedIdRef.current) {
-        map.setFeatureState({ source: SOURCE_ID, id: hoveredIdRef.current }, { active: false });
-      }
-      if (featureId !== undefined) {
-        hoveredIdRef.current = featureId;
-        map.setFeatureState({ source: SOURCE_ID, id: featureId }, { active: true });
-      }
+      hoveredIdRef.current = (event.features?.[0]?.properties?.id as string) ?? null;
+      applyActivePin();
     };
 
     const clearHoveredFeature = () => {
       map.getCanvas().style.cursor = '';
-      if (hoveredIdRef.current !== null && hoveredIdRef.current !== selectedIdRef.current) {
-        map.setFeatureState({ source: SOURCE_ID, id: hoveredIdRef.current }, { active: false });
-      }
       hoveredIdRef.current = null;
+      applyActivePin();
     };
 
     [PIN_LAYER_ID, LABEL_LAYER_ID].forEach((layerId) => map.on('click', layerId, selectFeature));
@@ -240,23 +254,19 @@ export const MapContainer = ({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isLoaded) return;
-    void Promise.all(companies.map((company) => registerLogo(company, map))).then(() => {
-      const source = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
-      source?.setData(geojsonData);
-    });
-  }, [companies, geojsonData, isLoaded]);
+    const source = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+    source?.setData(buildFeatureCollection(companies));
+    void Promise.all(companies.map((company) => registerLogo(company, map)));
+  }, [companies, isLoaded]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isLoaded) return;
 
-    if (selectedIdRef.current !== null) {
-      map.setFeatureState({ source: SOURCE_ID, id: selectedIdRef.current }, { active: false });
-    }
     selectedIdRef.current = selectedCompany?.id ?? null;
+    activePinUpdaterRef.current?.();
 
     if (selectedCompany) {
-      map.setFeatureState({ source: SOURCE_ID, id: selectedCompany.id }, { active: true });
       map.flyTo({ center: [selectedCompany.longitude, selectedCompany.latitude], zoom: 14, duration: 1200 });
     }
   }, [selectedCompany, isLoaded]);
