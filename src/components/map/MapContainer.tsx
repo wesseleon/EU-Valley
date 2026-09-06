@@ -21,7 +21,9 @@ interface MapContainerProps {
 
 const SOURCE_ID = 'companies';
 const PIN_LAYER_ID = 'company-pins';
+const ACTIVE_LAYER_ID = 'company-pins-active';
 const LABEL_LAYER_ID = 'company-labels';
+const NO_ACTIVE_PIN: maplibregl.FilterSpecification = ['==', ['get', 'id'], '__none__'];
 
 const drawPin = (
   source: CanvasImageSource,
@@ -85,8 +87,9 @@ export const MapContainer = ({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const companiesRef = useRef(companies);
   const selectionHandlerRef = useRef(onCompanySelect);
-  const hoveredIdRef = useRef<string | number | null>(null);
-  const selectedIdRef = useRef<string | number | null>(null);
+  const hoveredIdRef = useRef<string | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+  const activePinUpdaterRef = useRef<(() => void) | null>(null);
   const loadedLogosRef = useRef(new Set<string>());
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -161,12 +164,21 @@ export const MapContainer = ({
         type: 'symbol',
         source: SOURCE_ID,
         layout: {
-          'icon-image': ['case', ['boolean', ['feature-state', 'active'], false], ['get', 'hoverImageId'], ['get', 'imageId']],
-          'icon-size': [
-            '*',
-            ['interpolate', ['linear'], ['zoom'], 2, 0.4, 8, 0.6, 14, 0.8],
-            ['case', ['boolean', ['feature-state', 'active'], false], 1.1, 1],
-          ],
+          'icon-image': ['get', 'imageId'],
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 2, 0.4, 8, 0.6, 14, 0.8],
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+        },
+      });
+      // Hovered/selected pin renders on top with the darker border and a slight scale-up.
+      map.addLayer({
+        id: ACTIVE_LAYER_ID,
+        type: 'symbol',
+        source: SOURCE_ID,
+        filter: NO_ACTIVE_PIN,
+        layout: {
+          'icon-image': ['get', 'hoverImageId'],
+          'icon-size': ['interpolate', ['linear'], ['zoom'], 2, 0.46, 8, 0.69, 14, 0.92],
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
         },
@@ -208,24 +220,23 @@ export const MapContainer = ({
       if (company) selectionHandlerRef.current(company);
     };
 
+    const applyActivePin = () => {
+      const activeId = hoveredIdRef.current ?? selectedIdRef.current;
+      if (!map.getLayer(ACTIVE_LAYER_ID)) return;
+      map.setFilter(ACTIVE_LAYER_ID, activeId ? ['==', ['get', 'id'], activeId] : NO_ACTIVE_PIN);
+    };
+    activePinUpdaterRef.current = applyActivePin;
+
     const setHoveredFeature = (event: maplibregl.MapLayerMouseEvent) => {
-      const featureId = event.features?.[0]?.id;
       map.getCanvas().style.cursor = 'pointer';
-      if (hoveredIdRef.current !== null && hoveredIdRef.current !== selectedIdRef.current) {
-        map.setFeatureState({ source: SOURCE_ID, id: hoveredIdRef.current }, { active: false });
-      }
-      if (featureId !== undefined) {
-        hoveredIdRef.current = featureId;
-        map.setFeatureState({ source: SOURCE_ID, id: featureId }, { active: true });
-      }
+      hoveredIdRef.current = (event.features?.[0]?.properties?.id as string) ?? null;
+      applyActivePin();
     };
 
     const clearHoveredFeature = () => {
       map.getCanvas().style.cursor = '';
-      if (hoveredIdRef.current !== null && hoveredIdRef.current !== selectedIdRef.current) {
-        map.setFeatureState({ source: SOURCE_ID, id: hoveredIdRef.current }, { active: false });
-      }
       hoveredIdRef.current = null;
+      applyActivePin();
     };
 
     [PIN_LAYER_ID, LABEL_LAYER_ID].forEach((layerId) => map.on('click', layerId, selectFeature));
@@ -251,14 +262,10 @@ export const MapContainer = ({
     const map = mapRef.current;
     if (!map || !isLoaded) return;
 
-    if (selectedIdRef.current !== null) {
-      map.setFeatureState({ source: SOURCE_ID, id: selectedIdRef.current }, { active: false });
-    }
-    selectedIdRef.current = selectedCompany ? featureIdsRef.current.get(selectedCompany.id) ?? null : null;
+    selectedIdRef.current = selectedCompany?.id ?? null;
+    activePinUpdaterRef.current?.();
 
     if (selectedCompany) {
-      const featureId = featureIdsRef.current.get(selectedCompany.id);
-      if (featureId !== undefined) map.setFeatureState({ source: SOURCE_ID, id: featureId }, { active: true });
       map.flyTo({ center: [selectedCompany.longitude, selectedCompany.latitude], zoom: 14, duration: 1200 });
     }
   }, [selectedCompany, isLoaded]);
