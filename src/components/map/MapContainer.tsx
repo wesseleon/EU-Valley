@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Company } from '@/data/companies';
@@ -114,21 +114,6 @@ export const MapContainer = ({
       })),
     };
   };
-
-  const geojsonData = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(() => ({
-    type: 'FeatureCollection',
-    features: companies.map((company, index) => ({
-      type: 'Feature',
-      id: index + 1,
-      geometry: { type: 'Point', coordinates: [company.longitude, company.latitude] },
-      properties: {
-        id: company.id,
-        name: company.name,
-        imageId: `logo-${company.id}`,
-        hoverImageId: `logo-${company.id}-hover`,
-      },
-    })),
-  }), [companies]);
 
   const registerLogo = async (company: Company, map: maplibregl.Map) => {
     const imageId = `logo-${company.id}`;
@@ -257,11 +242,10 @@ export const MapContainer = ({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isLoaded) return;
-    void Promise.all(companies.map((company) => registerLogo(company, map))).then(() => {
-      const source = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
-      source?.setData(buildFeatureCollection(companies));
-    });
-  }, [companies, geojsonData, isLoaded]);
+    const source = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+    source?.setData(buildFeatureCollection(companies));
+    void Promise.all(companies.map((company) => registerLogo(company, map)));
+  }, [companies, isLoaded]);
 
   useEffect(() => {
     const map = mapRef.current;
