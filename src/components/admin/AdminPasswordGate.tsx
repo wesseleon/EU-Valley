@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PixelIcon } from '@/components/ui/PixelIcon';
+import { fetchJson } from '@/lib/apiClient';
 
 const LogoutContext = createContext<(() => Promise<void>) | null>(null);
 
@@ -18,13 +19,25 @@ export const AdminPasswordGate = ({ children }: { children: React.ReactNode }) =
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
 
   useEffect(() => {
-    fetch('/api/admin-session', { credentials: 'same-origin' })
-      .then((response) => response.ok ? response.json() : { authenticated: false })
-      .then((data) => setIsAuthenticated(Boolean(data.authenticated)))
-      .catch(() => setIsAuthenticated(false))
-      .finally(() => setIsLoading(false));
+    let cancelled = false;
+    void fetchJson<{ authenticated?: boolean }>('/api/admin-session').then((result) => {
+      if (cancelled) return;
+      if (!result) {
+        // The secure sign-in only runs on the published site; the preview has no
+        // backend, so editing here stays inside this browser.
+        setIsPreviewMode(true);
+        setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(Boolean(result.data?.authenticated));
+      }
+      setIsLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -32,15 +45,19 @@ export const AdminPasswordGate = ({ children }: { children: React.ReactNode }) =
     setError('');
     setIsLoading(true);
     try {
-      const response = await fetch('/api/admin-login', {
+      const result = await fetchJson<{ message?: string }>('/api/admin-login', {
         method: 'POST',
-        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username.trim(), password }),
       });
-      if (!response.ok) {
-        const result = await response.json().catch(() => null) as { message?: string } | null;
-        throw new Error(result?.message || 'Incorrect username or password');
+      if (!result) {
+        setIsPreviewMode(true);
+        setIsAuthenticated(true);
+        setPassword('');
+        return;
+      }
+      if (!result.ok) {
+        throw new Error(result.data?.message || 'Incorrect username or password');
       }
       setIsAuthenticated(true);
       setPassword('');
@@ -53,7 +70,7 @@ export const AdminPasswordGate = ({ children }: { children: React.ReactNode }) =
   };
 
   const handleLogout = async () => {
-    await fetch('/api/admin-session', { method: 'DELETE', credentials: 'same-origin' }).catch(() => undefined);
+    await fetchJson('/api/admin-session', { method: 'DELETE' });
     setIsAuthenticated(false);
     setUsername('');
     setPassword('');
@@ -64,7 +81,16 @@ export const AdminPasswordGate = ({ children }: { children: React.ReactNode }) =
   }
 
   if (isAuthenticated) {
-    return <LogoutContext.Provider value={handleLogout}>{children}</LogoutContext.Provider>;
+    return (
+      <LogoutContext.Provider value={handleLogout}>
+        {isPreviewMode && (
+          <p className="bg-primary/10 px-4 py-2 text-center text-sm text-primary" role="status">
+            Preview mode: sign-in and shared saving only work on your published site. Changes made here stay in this browser.
+          </p>
+        )}
+        {children}
+      </LogoutContext.Provider>
+    );
   }
 
   return (
