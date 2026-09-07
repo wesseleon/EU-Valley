@@ -68,6 +68,12 @@ const drawPin = (
   return context.getImageData(0, 0, PIN_SIZE, PIN_SIZE);
 };
 
+/** Replaces any existing image (such as the transparent placeholder) with the final pin. */
+const setImage = (map: maplibregl.Map, id: string, data: ImageData) => {
+  if (map.hasImage(id)) map.removeImage(id);
+  map.addImage(id, data);
+};
+
 const loadImage = (url: string) => new Promise<HTMLImageElement>((resolve, reject) => {
   const image = new Image();
   image.crossOrigin = 'anonymous';
@@ -120,7 +126,7 @@ export const MapContainer = ({
 
   const registerLogo = async (company: Company, map: maplibregl.Map) => {
     const imageId = `logo-${company.id}`;
-    if (loadedLogosRef.current.has(imageId) || map.hasImage(imageId)) return;
+    if (loadedLogosRef.current.has(imageId)) return;
     loadedLogosRef.current.add(imageId);
 
     let image: HTMLImageElement | null = null;
@@ -137,8 +143,8 @@ export const MapContainer = ({
     if (!mapRef.current) return;
     const normal = drawPin(image, '#FFFFFF');
     const hover = drawPin(image, '#173F8A');
-    if (normal && !map.hasImage(imageId)) map.addImage(imageId, normal);
-    if (hover && !map.hasImage(`${imageId}-hover`)) map.addImage(`${imageId}-hover`, hover);
+    if (normal) setImage(map, imageId, normal);
+    if (hover) setImage(map, `${imageId}-hover`, hover);
   };
 
   useEffect(() => {
@@ -154,7 +160,6 @@ export const MapContainer = ({
       attributionControl: false,
     });
     mapRef.current = map;
-    (window as unknown as Record<string, unknown>).__euMap = map;
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
     map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
 
