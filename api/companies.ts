@@ -16,13 +16,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const companiesBlob = blobs.find(b => b.pathname === BLOB_FILENAME);
       
       if (!companiesBlob) {
+        res.setHeader('Cache-Control', 'no-store, max-age=0');
         return res.status(200).json({ companies: [], hiddenIds: [], lastUpdated: null, version: null });
       }
 
-      const response = await fetch(companiesBlob.url);
+      // Bypass the blob CDN cache so edits are visible immediately.
+      const response = await fetch(`${companiesBlob.url}?t=${Date.now()}`, { cache: 'no-store' });
       const data = await response.json();
       
-      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
       return res.status(200).json({ ...data, version: companiesBlob.uploadedAt.toISOString() });
     }
 

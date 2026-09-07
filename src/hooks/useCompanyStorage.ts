@@ -50,6 +50,10 @@ export const useCompanyStorage = () => {
   const hiddenRef = useRef(new Set<string>());
   const isSavingRef = useRef(false);
   const saveQueueRef = useRef(Promise.resolve(true));
+  /** Server timestamp of the newest snapshot this browser knows about. */
+  const latestKnownUpdateRef = useRef<number>(0);
+  /** Incremented on every local write so replies from older reads are ignored. */
+  const writeGenerationRef = useRef(0);
 
   const applyLocalState = useCallback((companies: StoredCompany[], hidden: Set<string>) => {
     companiesRef.current = companies;
@@ -62,7 +66,10 @@ export const useCompanyStorage = () => {
 
   const fetchFromApi = useCallback(async () => {
     if (isSavingRef.current) return false;
-    const result = await fetchJson<CompanyData>('/api/companies', { cache: 'no-store' });
+    const generation = writeGenerationRef.current;
+    const result = await fetchJson<CompanyData>(`/api/companies?t=${Date.now()}`, { cache: 'no-store' });
+    // A local edit happened while this read was in flight: the reply is stale.
+    if (generation !== writeGenerationRef.current || isSavingRef.current) return false;
     if (!result) {
       // No live backend (e.g. the preview): keep working with browser storage.
       localOnlyRef.current = true;
@@ -74,6 +81,10 @@ export const useCompanyStorage = () => {
     const data = result.data;
     if (!result.ok || !data || !Array.isArray(data.companies) || !Array.isArray(data.hiddenIds)) return false;
     if (data.companies.length === 0 && !data.lastUpdated) return false;
+    const remoteUpdatedAt = data.lastUpdated ? Date.parse(data.lastUpdated) : 0;
+    // Never overwrite newer local state with an older (CDN-cached) snapshot.
+    if (remoteUpdatedAt && remoteUpdatedAt < latestKnownUpdateRef.current) return false;
+    latestKnownUpdateRef.current = Math.max(latestKnownUpdateRef.current, remoteUpdatedAt);
     applyLocalState(data.companies, new Set(data.hiddenIds));
     setLastSyncTime(data.lastUpdated ? new Date(data.lastUpdated) : new Date());
     setSyncError(null);
@@ -87,6 +98,7 @@ export const useCompanyStorage = () => {
       return true;
     }
     isSavingRef.current = true;
+    writeGenerationRef.current += 1;
     setIsSyncing(true);
     try {
       const result = await fetchJson<{ lastUpdated?: string }>('/api/companies', {
@@ -103,7 +115,9 @@ export const useCompanyStorage = () => {
       if (!result.ok) {
         throw new Error(result.status === 401 ? 'Your admin session has expired.' : 'Changes could not be saved.');
       }
-      setLastSyncTime(result.data?.lastUpdated ? new Date(result.data.lastUpdated) : new Date());
+      const savedAt = result.data?.lastUpdated ? Date.parse(result.data.lastUpdated) : Date.now();
+      latestKnownUpdateRef.current = Math.max(latestKnownUpdateRef.current, savedAt);
+      setLastSyncTime(new Date(savedAt));
       setSyncError(null);
       return true;
     } catch (error) {
