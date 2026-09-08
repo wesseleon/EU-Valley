@@ -1,16 +1,22 @@
+import { forwardRef } from 'react';
 import { cn } from '@/lib/utils';
 
-interface PixelIconProps {
+interface PixelIconProps extends React.HTMLAttributes<HTMLElement> {
   name: string;
-  className?: string;
   label?: string;
 }
 
-export const PixelIcon = ({ name, className, label }: PixelIconProps) => (
-  <i
-    className={cn('hn inline-block text-[1em] leading-none', `hn-${name}`, className)}
-    aria-hidden={label ? undefined : true}
-    aria-label={label}
-    role={label ? 'img' : undefined}
-  />
+export const PixelIcon = forwardRef<HTMLElement, PixelIconProps>(
+  ({ name, className, label, ...props }, ref) => (
+    <i
+      ref={ref}
+      className={cn('hn inline-block text-[1em] leading-none', `hn-${name}`, className)}
+      aria-hidden={label ? undefined : true}
+      aria-label={label}
+      role={label ? 'img' : undefined}
+      {...props}
+    />
+  ),
 );
+
+PixelIcon.displayName = 'PixelIcon';
