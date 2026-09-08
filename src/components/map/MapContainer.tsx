@@ -101,7 +101,11 @@ export const MapContainer = ({
   const selectedIdRef = useRef<string | null>(null);
   const activePinUpdaterRef = useRef<(() => void) | null>(null);
   const loadedLogosRef = useRef(new Set<string>());
+  const logoImageCacheRef = useRef(new Map<string, HTMLImageElement>());
   const [isLoaded, setIsLoaded] = useState(false);
+  const { theme } = useTheme();
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
 
   companiesRef.current = companies;
   selectionHandlerRef.current = onCompanySelect;
@@ -130,16 +134,20 @@ export const MapContainer = ({
 
   const registerLogo = async (company: Company, map: maplibregl.Map) => {
     const imageId = `logo-${company.id}`;
-    // The logo URL is part of the key so an edited logo is redrawn instead of reusing the old one.
-    const cacheKey = `${imageId}::${company.logoUrl ?? ''}`;
+    // The logo URL and theme are part of the key so edited logos and theme switches redraw the pin.
+    const cacheKey = `${imageId}::${company.logoUrl ?? ''}::${themeRef.current}`;
     if (loadedLogosRef.current.has(cacheKey)) return;
     loadedLogosRef.current.add(cacheKey);
 
-    let image: HTMLImageElement | null = null;
-    try {
-      image = await loadImage(company.logoUrl || createFallbackImage(company.name));
-    } catch {
-      image = await loadImage(createFallbackImage(company.name)).catch(() => null);
+    const sourceKey = `${imageId}::${company.logoUrl ?? ''}`;
+    let image: HTMLImageElement | null = logoImageCacheRef.current.get(sourceKey) ?? null;
+    if (!image) {
+      try {
+        image = await loadImage(company.logoUrl || createFallbackImage(company.name));
+      } catch {
+        image = await loadImage(createFallbackImage(company.name)).catch(() => null);
+      }
+      if (image) logoImageCacheRef.current.set(sourceKey, image);
     }
     if (!image) {
       loadedLogosRef.current.delete(cacheKey);
@@ -147,11 +155,13 @@ export const MapContainer = ({
     }
 
     if (!mapRef.current) return;
-    const normal = drawPin(image, '#FFFFFF');
-    const hover = drawPin(image, '#173F8A');
+    const palette = PIN_COLORS[themeRef.current];
+    const normal = drawPin(image, palette.border, palette.plate);
+    const hover = drawPin(image, palette.activeBorder, palette.plate);
     if (normal) setImage(map, imageId, normal);
     if (hover) setImage(map, `${imageId}-hover`, hover);
   };
+
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
