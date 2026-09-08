@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Company } from '@/data/companies';
+import { useTheme, type Theme } from '@/hooks/useTheme';
 import {
   createFallbackImage,
   PIN_BORDER_RADIUS,
   PIN_BORDER_WIDTH,
   PIN_INNER_RADIUS,
   PIN_PADDING,
+  PIN_SCALE,
   PIN_SIZE,
 } from '@/lib/createFallbackImage';
 
@@ -25,15 +27,30 @@ const ACTIVE_LAYER_ID = 'company-pins-active';
 const LABEL_LAYER_ID = 'company-labels';
 const NO_ACTIVE_PIN: maplibregl.FilterSpecification = ['==', ['get', 'id'], '__none__'];
 
+/** Pin and label colours per theme, matching the interface tokens. */
+const PIN_COLORS: Record<Theme, { border: string; activeBorder: string; plate: string }> = {
+  light: { border: '#FFFFFF', activeBorder: '#173F8A', plate: '#FFFFFF' },
+  dark: { border: '#12233F', activeBorder: '#7FB4FF', plate: '#F4F7FC' },
+};
+
+const LABEL_COLORS: Record<Theme, { text: string; halo: string }> = {
+  light: { text: '#12233F', halo: '#FFFFFF' },
+  dark: { text: '#E8EEF8', halo: '#0B1729' },
+};
+
 const drawPin = (
   source: CanvasImageSource,
   borderColor: string,
+  plateColor: string,
 ): ImageData | null => {
   const canvas = document.createElement('canvas');
-  canvas.width = PIN_SIZE;
-  canvas.height = PIN_SIZE;
+  canvas.width = PIN_SIZE * PIN_SCALE;
+  canvas.height = PIN_SIZE * PIN_SCALE;
   const context = canvas.getContext('2d');
   if (!context) return null;
+  context.scale(PIN_SCALE, PIN_SCALE);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
 
   context.fillStyle = borderColor;
   context.beginPath();
@@ -49,7 +66,7 @@ const drawPin = (
     PIN_INNER_RADIUS,
   );
   context.clip();
-  context.fillStyle = '#FFFFFF';
+  context.fillStyle = plateColor;
   context.fillRect(PIN_PADDING, PIN_PADDING, PIN_SIZE - PIN_PADDING * 2, PIN_SIZE - PIN_PADDING * 2);
   context.drawImage(source, PIN_PADDING, PIN_PADDING, PIN_SIZE - PIN_PADDING * 2, PIN_SIZE - PIN_PADDING * 2);
   context.restore();
@@ -65,13 +82,75 @@ const drawPin = (
   );
   context.stroke();
 
-  return context.getImageData(0, 0, PIN_SIZE, PIN_SIZE);
+  return context.getImageData(0, 0, PIN_SIZE * PIN_SCALE, PIN_SIZE * PIN_SCALE);
 };
 
 /** Replaces any existing image (such as the transparent placeholder) with the final pin. */
 const setImage = (map: maplibregl.Map, id: string, data: ImageData) => {
   if (map.hasImage(id)) map.removeImage(id);
-  map.addImage(id, data);
+  map.addImage(id, data, { pixelRatio: PIN_SCALE });
+};
+
+const ORIGINAL_PAINT = new WeakMap<maplibregl.Map, Map<string, string | undefined>>();
+const THEMEABLE_PAINT = ['background-color', 'fill-color', 'line-color', 'fill-extrusion-color'] as const;
+
+const toDarkColor = (value: string): string => {
+  const probe = document.createElement('canvas').getContext('2d');
+  if (!probe) return value;
+  probe.fillStyle = '#000000';
+  probe.fillStyle = value;
+  const parsed = probe.fillStyle as string;
+  const match = /^#([0-9a-f]{6})$/i.exec(parsed);
+  if (!match) return value;
+  const int = parseInt(match[1], 16);
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  const lightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  // Invert the tone and pull it towards the interface's deep blue.
+  const target = 0.06 + (1 - lightness) * 0.22;
+  const mix = (channel: number) => Math.round(Math.min(255, (channel / 255) * 0.25 * 255 + target * 255));
+  const blue = Math.round(Math.min(255, mix(b) + 18));
+  return `#${[mix(r), mix(g), blue].map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+};
+
+/** Recolours the basemap so it matches the light or dark interface. */
+const applyBasemapTheme = (map: maplibregl.Map, theme: Theme) => {
+  const style = map.getStyle();
+  if (!style?.layers) return;
+  let originals = ORIGINAL_PAINT.get(map);
+  if (!originals) {
+    originals = new Map();
+    ORIGINAL_PAINT.set(map, originals);
+  }
+
+  style.layers.forEach((layer) => {
+    if (layer.id.startsWith('company-')) return;
+    THEMEABLE_PAINT.forEach((property) => {
+      const paint = (layer as { paint?: Record<string, unknown> }).paint;
+      if (!paint || !(property in paint)) return;
+      const key = `${layer.id}::${property}`;
+      if (!originals!.has(key)) originals!.set(key, paint[property] as string);
+      const original = originals!.get(key);
+      if (typeof original !== 'string') return;
+      map.setPaintProperty(layer.id, property, theme === 'dark' ? toDarkColor(original) : original);
+    });
+
+    if (layer.type === 'symbol') {
+      const key = `${layer.id}::text-color`;
+      const paint = (layer as { paint?: Record<string, unknown> }).paint;
+      if (!paint || typeof paint['text-color'] !== 'string') return;
+      if (!originals!.has(key)) originals!.set(key, paint['text-color'] as string);
+      map.setPaintProperty(
+        layer.id,
+        'text-color',
+        theme === 'dark' ? '#C7D6EC' : (originals!.get(key) as string),
+      );
+      if (typeof paint['text-halo-color'] === 'string') {
+        map.setPaintProperty(layer.id, 'text-halo-color', theme === 'dark' ? '#0B1729' : (paint['text-halo-color'] as string));
+      }
+    }
+  });
 };
 
 const loadImage = (url: string) => new Promise<HTMLImageElement>((resolve, reject) => {
@@ -97,7 +176,11 @@ export const MapContainer = ({
   const selectedIdRef = useRef<string | null>(null);
   const activePinUpdaterRef = useRef<(() => void) | null>(null);
   const loadedLogosRef = useRef(new Set<string>());
+  const logoImageCacheRef = useRef(new Map<string, HTMLImageElement>());
   const [isLoaded, setIsLoaded] = useState(false);
+  const { theme } = useTheme();
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
 
   companiesRef.current = companies;
   selectionHandlerRef.current = onCompanySelect;
@@ -126,26 +209,34 @@ export const MapContainer = ({
 
   const registerLogo = async (company: Company, map: maplibregl.Map) => {
     const imageId = `logo-${company.id}`;
-    if (loadedLogosRef.current.has(imageId)) return;
-    loadedLogosRef.current.add(imageId);
+    // The logo URL and theme are part of the key so edited logos and theme switches redraw the pin.
+    const cacheKey = `${imageId}::${company.logoUrl ?? ''}::${themeRef.current}`;
+    if (loadedLogosRef.current.has(cacheKey)) return;
+    loadedLogosRef.current.add(cacheKey);
 
-    let image: HTMLImageElement | null = null;
-    try {
-      image = await loadImage(company.logoUrl || createFallbackImage(company.name));
-    } catch {
-      image = await loadImage(createFallbackImage(company.name)).catch(() => null);
+    const sourceKey = `${imageId}::${company.logoUrl ?? ''}`;
+    let image: HTMLImageElement | null = logoImageCacheRef.current.get(sourceKey) ?? null;
+    if (!image) {
+      try {
+        image = await loadImage(company.logoUrl || createFallbackImage(company.name));
+      } catch {
+        image = await loadImage(createFallbackImage(company.name)).catch(() => null);
+      }
+      if (image) logoImageCacheRef.current.set(sourceKey, image);
     }
     if (!image) {
-      loadedLogosRef.current.delete(imageId);
+      loadedLogosRef.current.delete(cacheKey);
       return;
     }
 
     if (!mapRef.current) return;
-    const normal = drawPin(image, '#FFFFFF');
-    const hover = drawPin(image, '#173F8A');
+    const palette = PIN_COLORS[themeRef.current];
+    const normal = drawPin(image, palette.border, palette.plate);
+    const hover = drawPin(image, palette.activeBorder, palette.plate);
     if (normal) setImage(map, imageId, normal);
     if (hover) setImage(map, `${imageId}-hover`, hover);
   };
+
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -204,11 +295,12 @@ export const MapContainer = ({
           'text-font': ['Noto Sans Bold'],
         },
         paint: {
-          'text-color': '#1A1A1A',
-          'text-halo-color': '#FFFFFF',
-          'text-halo-width': 0.6,
+          'text-color': LABEL_COLORS[themeRef.current].text,
+          'text-halo-color': LABEL_COLORS[themeRef.current].halo,
+          'text-halo-width': 1,
         },
       });
+      applyBasemapTheme(map, themeRef.current);
       setIsLoaded(true);
       // Logos load in the background so pins appear immediately.
       void Promise.all(companiesRef.current.map((company) => registerLogo(company, map)));
@@ -275,6 +367,19 @@ export const MapContainer = ({
       map.flyTo({ center: [selectedCompany.longitude, selectedCompany.latitude], zoom: 14, duration: 1200 });
     }
   }, [selectedCompany, isLoaded]);
+
+  // Re-skins the basemap, labels and pins whenever the interface theme changes.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isLoaded) return;
+
+    applyBasemapTheme(map, theme);
+    if (map.getLayer(LABEL_LAYER_ID)) {
+      map.setPaintProperty(LABEL_LAYER_ID, 'text-color', LABEL_COLORS[theme].text);
+      map.setPaintProperty(LABEL_LAYER_ID, 'text-halo-color', LABEL_COLORS[theme].halo);
+    }
+    void Promise.all(companiesRef.current.map((company) => registerLogo(company, map)));
+  }, [theme, isLoaded]);
 
   useEffect(() => {
     if (!mapRef.current || !isLoaded || selectedCompany) return;
