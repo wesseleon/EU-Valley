@@ -246,11 +246,14 @@ const AdminContent = () => {
               <p className="text-muted-foreground">Manage companies on the EU Valley map</p>
             </div>
           </div>
-          <ThemeToggle />
-          <Button variant="outline" onClick={logout} className="gap-2 hover:bg-destructive hover:text-destructive-foreground transition-colors">
-            <PixelIcon name="logout" />
-            Log out
-          </Button>
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <Button variant="outline" onClick={logout} className="gap-2 hover:bg-destructive hover:text-destructive-foreground transition-colors">
+              <PixelIcon name="logout" />
+              Log out
+            </Button>
+          </div>
+
         </header>
 
         {syncError && <p className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive" role="alert">{syncError}</p>}
