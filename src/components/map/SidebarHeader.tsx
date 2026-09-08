@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { countries } from '@/data/companies';
 import { cn } from '@/lib/utils';
 import { PixelIcon } from '@/components/ui/PixelIcon';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface SidebarHeaderProps {
   searchQuery: string;
@@ -29,7 +30,7 @@ export const SidebarHeader = ({
   isCollapsed = false,
 }: SidebarHeaderProps) => {
   return (
-    <div className="p-4 border-b border-border space-y-4">
+    <div className="space-y-4 border-b border-border p-5">
       {/* Collapsible top section */}
       <div
         className={cn(
@@ -45,11 +46,14 @@ export const SidebarHeader = ({
         </div>
 
         {/* Title and Description */}
-        <div className="space-y-1">
-          <h1 className="text-xl font-bold text-foreground">EU Valley</h1>
-          <p className="text-sm text-muted-foreground">
-            Discover innovative companies across Europe and beyond
-          </p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <h1 className="text-xl font-bold text-foreground">EU Valley</h1>
+            <p className="text-sm text-muted-foreground">
+              Discover innovative companies across Europe and beyond
+            </p>
+          </div>
+          <ThemeToggle className="shrink-0" />
         </div>
 
         {/* Socials */}

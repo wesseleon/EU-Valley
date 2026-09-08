@@ -15,6 +15,7 @@ import { useCompanyStorage, StoredCompany } from '@/hooks/useCompanyStorage';
 import { countries, categories } from '@/data/companies';
 import { AdminPasswordGate, useAdminLogout } from '@/components/admin/AdminPasswordGate';
 import { PixelIcon } from '@/components/ui/PixelIcon';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { createFallbackImage } from '@/lib/createFallbackImage';
 
 const AdminContent = () => {
@@ -245,6 +246,7 @@ const AdminContent = () => {
               <p className="text-muted-foreground">Manage companies on the EU Valley map</p>
             </div>
           </div>
+          <ThemeToggle />
           <Button variant="outline" onClick={logout} className="gap-2 hover:bg-destructive hover:text-destructive-foreground transition-colors">
             <PixelIcon name="logout" />
             Log out
