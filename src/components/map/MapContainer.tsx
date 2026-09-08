@@ -8,6 +8,7 @@ import {
   PIN_BORDER_WIDTH,
   PIN_INNER_RADIUS,
   PIN_PADDING,
+  PIN_SCALE,
   PIN_SIZE,
 } from '@/lib/createFallbackImage';
 
@@ -30,10 +31,13 @@ const drawPin = (
   borderColor: string,
 ): ImageData | null => {
   const canvas = document.createElement('canvas');
-  canvas.width = PIN_SIZE;
-  canvas.height = PIN_SIZE;
+  canvas.width = PIN_SIZE * PIN_SCALE;
+  canvas.height = PIN_SIZE * PIN_SCALE;
   const context = canvas.getContext('2d');
   if (!context) return null;
+  context.scale(PIN_SCALE, PIN_SCALE);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
 
   context.fillStyle = borderColor;
   context.beginPath();
@@ -65,13 +69,13 @@ const drawPin = (
   );
   context.stroke();
 
-  return context.getImageData(0, 0, PIN_SIZE, PIN_SIZE);
+  return context.getImageData(0, 0, PIN_SIZE * PIN_SCALE, PIN_SIZE * PIN_SCALE);
 };
 
 /** Replaces any existing image (such as the transparent placeholder) with the final pin. */
 const setImage = (map: maplibregl.Map, id: string, data: ImageData) => {
   if (map.hasImage(id)) map.removeImage(id);
-  map.addImage(id, data);
+  map.addImage(id, data, { pixelRatio: PIN_SCALE });
 };
 
 const loadImage = (url: string) => new Promise<HTMLImageElement>((resolve, reject) => {
@@ -126,8 +130,10 @@ export const MapContainer = ({
 
   const registerLogo = async (company: Company, map: maplibregl.Map) => {
     const imageId = `logo-${company.id}`;
-    if (loadedLogosRef.current.has(imageId)) return;
-    loadedLogosRef.current.add(imageId);
+    // The logo URL is part of the key so an edited logo is redrawn instead of reusing the old one.
+    const cacheKey = `${imageId}::${company.logoUrl ?? ''}`;
+    if (loadedLogosRef.current.has(cacheKey)) return;
+    loadedLogosRef.current.add(cacheKey);
 
     let image: HTMLImageElement | null = null;
     try {
@@ -136,7 +142,7 @@ export const MapContainer = ({
       image = await loadImage(createFallbackImage(company.name)).catch(() => null);
     }
     if (!image) {
-      loadedLogosRef.current.delete(imageId);
+      loadedLogosRef.current.delete(cacheKey);
       return;
     }
 
