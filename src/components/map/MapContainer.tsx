@@ -128,6 +128,8 @@ export const MapContainer = ({
   const { theme } = useTheme();
   const themeRef = useRef(theme);
   themeRef.current = theme;
+  const appliedThemeRef = useRef(theme);
+
 
   companiesRef.current = companies;
   selectionHandlerRef.current = onCompanySelect;
