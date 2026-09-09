@@ -29,13 +29,18 @@ const NO_ACTIVE_PIN: maplibregl.FilterSpecification = ['==', ['get', 'id'], '__n
 
 /** Pin and label colours per theme, matching the interface tokens. */
 const PIN_COLORS: Record<Theme, { border: string; activeBorder: string; plate: string }> = {
-  light: { border: '#FFFFFF', activeBorder: '#173F8A', plate: '#FFFFFF' },
-  dark: { border: '#12233F', activeBorder: '#7FB4FF', plate: '#F4F7FC' },
+  light: { border: '#FFFFFF', activeBorder: '#12618A', plate: '#FFFFFF' },
+  dark: { border: '#404040', activeBorder: '#5DB7E5', plate: '#F5F5F5' },
 };
 
 const LABEL_COLORS: Record<Theme, { text: string; halo: string }> = {
-  light: { text: '#12233F', halo: '#FFFFFF' },
-  dark: { text: '#E8EEF8', halo: '#0B1729' },
+  light: { text: '#171717', halo: '#FFFFFF' },
+  dark: { text: '#FAFAFA', halo: '#171717' },
+};
+
+const BASEMAP_LABEL_COLORS: Record<Theme, { text: string; halo: string }> = {
+  light: { text: '#303030', halo: '#F7F7F5' },
+  dark: { text: '#F2F2F2', halo: '#242424' },
 };
 
 const drawPin = (
@@ -91,10 +96,10 @@ const setImage = (map: maplibregl.Map, id: string, data: ImageData) => {
   map.addImage(id, data, { pixelRatio: PIN_SCALE });
 };
 
-const ORIGINAL_PAINT = new WeakMap<maplibregl.Map, Map<string, string | undefined>>();
+const ORIGINAL_PAINT = new WeakMap<maplibregl.Map, Map<string, unknown>>();
 const THEMEABLE_PAINT = ['background-color', 'fill-color', 'line-color', 'fill-extrusion-color'] as const;
 
-const toDarkColor = (value: string): string => {
+const toNeutralDarkColor = (value: string): string => {
   const probe = document.createElement('canvas').getContext('2d');
   if (!probe) return value;
   probe.fillStyle = '#000000';
@@ -107,11 +112,10 @@ const toDarkColor = (value: string): string => {
   const g = (int >> 8) & 255;
   const b = int & 255;
   const lightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  // Invert the tone and pull it towards the interface's deep blue.
-  const target = 0.06 + (1 - lightness) * 0.22;
-  const mix = (channel: number) => Math.round(Math.min(255, (channel / 255) * 0.25 * 255 + target * 255));
-  const blue = Math.round(Math.min(255, mix(b) + 18));
-  return `#${[mix(r), mix(g), blue].map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+  // Keep geographic hierarchy while removing hue from non-interactive map surfaces.
+  const neutral = Math.round(30 + (1 - lightness) * 35);
+  const channel = neutral.toString(16).padStart(2, '0');
+  return `#${channel}${channel}${channel}`;
 };
 
 /** Recolours the basemap so it matches the light or dark interface. */
@@ -130,25 +134,22 @@ const applyBasemapTheme = (map: maplibregl.Map, theme: Theme) => {
       const paint = (layer as { paint?: Record<string, unknown> }).paint;
       if (!paint || !(property in paint)) return;
       const key = `${layer.id}::${property}`;
-      if (!originals!.has(key)) originals!.set(key, paint[property] as string);
+      if (!originals.has(key)) originals.set(key, paint[property]);
       const original = originals!.get(key);
       if (typeof original !== 'string') return;
-      map.setPaintProperty(layer.id, property, theme === 'dark' ? toDarkColor(original) : original);
+      map.setPaintProperty(layer.id, property, theme === 'dark' ? toNeutralDarkColor(original) : original);
     });
 
     if (layer.type === 'symbol') {
       const key = `${layer.id}::text-color`;
       const paint = (layer as { paint?: Record<string, unknown> }).paint;
-      if (!paint || typeof paint['text-color'] !== 'string') return;
-      if (!originals!.has(key)) originals!.set(key, paint['text-color'] as string);
-      map.setPaintProperty(
-        layer.id,
-        'text-color',
-        theme === 'dark' ? '#C7D6EC' : (originals!.get(key) as string),
-      );
-      if (typeof paint['text-halo-color'] === 'string') {
-        map.setPaintProperty(layer.id, 'text-halo-color', theme === 'dark' ? '#0B1729' : (paint['text-halo-color'] as string));
-      }
+       if (!paint || !('text-color' in paint)) return;
+       const haloKey = `${layer.id}::text-halo-color`;
+       if (!originals.has(key)) originals.set(key, paint['text-color']);
+       if (!originals.has(haloKey)) originals.set(haloKey, paint['text-halo-color']);
+       const labelPalette = BASEMAP_LABEL_COLORS[theme];
+       map.setPaintProperty(layer.id, 'text-color', labelPalette.text);
+       if ('text-halo-color' in paint) map.setPaintProperty(layer.id, 'text-halo-color', labelPalette.halo);
     }
   });
 };
