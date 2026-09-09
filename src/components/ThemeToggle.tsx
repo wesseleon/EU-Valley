@@ -20,7 +20,7 @@ export const ThemeToggle = ({ className }: ThemeToggleProps) => {
       aria-pressed={isDark}
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-      className={cn('border-border bg-card transition-colors hover:bg-primary hover:text-primary-foreground', className)}
+      className={cn('border-border bg-card text-card-foreground transition-colors hover:bg-primary hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2', className)}
     >
       <PixelIcon name={isDark ? 'sun' : 'moon'} />
     </Button>

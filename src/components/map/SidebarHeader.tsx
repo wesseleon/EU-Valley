@@ -4,7 +4,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { countries } from '@/data/companies';
 import { cn } from '@/lib/utils';
 import { PixelIcon } from '@/components/ui/PixelIcon';
-import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface SidebarHeaderProps {
   searchQuery: string;
@@ -39,21 +38,20 @@ export const SidebarHeader = ({
         )}
       >
         {/* Cover Image */}
-        <div className="relative h-32 rounded-lg overflow-hidden bg-primary/10">
+        <div className="relative h-32 overflow-hidden rounded-lg bg-muted">
           <div className="absolute inset-0 flex items-center justify-center">
-            <PixelIcon name="globe-americas" className="text-6xl text-primary/30" />
+            <PixelIcon name="globe-americas" className="text-6xl text-muted-foreground/60" />
           </div>
         </div>
 
         {/* Title and Description */}
-        <div className="flex items-start justify-between gap-3">
+        <div>
           <div className="space-y-1">
             <h1 className="text-xl font-bold text-foreground">EU Valley</h1>
             <p className="text-sm text-muted-foreground">
               Discover innovative companies across Europe and beyond
             </p>
           </div>
-          <ThemeToggle className="shrink-0" />
         </div>
 
         {/* Socials */}

@@ -11,6 +11,7 @@ import {
 import { useCompanyStorage } from '@/hooks/useCompanyStorage';
 import { fuzzyMatch } from '@/lib/fuzzySearch';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const Index = () => {
   const { companies: allCompanies } = useCompanyStorage();
@@ -77,7 +78,8 @@ const Index = () => {
   }, []);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background">
+    <div className="relative flex h-dvh w-full overflow-hidden bg-background">
+      <ThemeToggle className="absolute right-[10px] top-[10px] z-20 min-h-11 min-w-11 shadow-md" />
       {/* Desktop sidebar */}
       {!isMobile && (
         <Sidebar
