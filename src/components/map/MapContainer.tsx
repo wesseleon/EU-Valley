@@ -184,13 +184,63 @@ export const MapContainer = ({
     if (hover) setImage(map, `${imageId}-hover`, hover);
   };
 
+  /** (Re)creates the company source, pin layers and labels on top of the current basemap. */
+  const addCompanyLayers = (map: maplibregl.Map) => {
+    if (map.getSource(SOURCE_ID)) return;
+    map.addSource(SOURCE_ID, { type: 'geojson', data: buildFeatureCollection(companiesRef.current) });
+    map.addLayer({
+      id: PIN_LAYER_ID,
+      type: 'symbol',
+      source: SOURCE_ID,
+      layout: {
+        'icon-image': ['get', 'imageId'],
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 2, 0.4, 8, 0.6, 14, 0.8],
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+      },
+    });
+    // Hovered/selected pin renders on top with the darker border and a slight scale-up.
+    map.addLayer({
+      id: ACTIVE_LAYER_ID,
+      type: 'symbol',
+      source: SOURCE_ID,
+      filter: NO_ACTIVE_PIN,
+      layout: {
+        'icon-image': ['get', 'hoverImageId'],
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 2, 0.46, 8, 0.69, 14, 0.92],
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+      },
+    });
+    map.addLayer({
+      id: LABEL_LAYER_ID,
+      type: 'symbol',
+      source: SOURCE_ID,
+      minzoom: 8,
+      layout: {
+        'text-field': ['get', 'name'],
+        'text-size': 11,
+        'text-offset': [0, 1.8],
+        'text-anchor': 'top',
+        'text-max-width': 10,
+        'text-allow-overlap': false,
+        'text-font': ['Noto Sans Bold'],
+      },
+      paint: {
+        'text-color': LABEL_COLORS[themeRef.current].text,
+        'text-halo-color': LABEL_COLORS[themeRef.current].halo,
+        'text-halo-width': 1,
+      },
+    });
+    void Promise.all(companiesRef.current.map((company) => registerLogo(company, map)));
+  };
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: 'https://api.maptiler.com/maps/019bf1f1-a9e6-76b9-a536-7aac425452ca/style.json?key=OXErs5ulKuJgqbESSXXz',
+      style: STYLE_URLS[themeRef.current],
       center: viewCenter,
       zoom: viewZoom,
       minZoom: 2,
@@ -202,56 +252,10 @@ export const MapContainer = ({
     map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
 
     map.on('load', () => {
-      map.addSource(SOURCE_ID, { type: 'geojson', data: buildFeatureCollection(companiesRef.current) });
-      map.addLayer({
-        id: PIN_LAYER_ID,
-        type: 'symbol',
-        source: SOURCE_ID,
-        layout: {
-          'icon-image': ['get', 'imageId'],
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 2, 0.4, 8, 0.6, 14, 0.8],
-          'icon-allow-overlap': true,
-          'icon-ignore-placement': true,
-        },
-      });
-      // Hovered/selected pin renders on top with the darker border and a slight scale-up.
-      map.addLayer({
-        id: ACTIVE_LAYER_ID,
-        type: 'symbol',
-        source: SOURCE_ID,
-        filter: NO_ACTIVE_PIN,
-        layout: {
-          'icon-image': ['get', 'hoverImageId'],
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 2, 0.46, 8, 0.69, 14, 0.92],
-          'icon-allow-overlap': true,
-          'icon-ignore-placement': true,
-        },
-      });
-      map.addLayer({
-        id: LABEL_LAYER_ID,
-        type: 'symbol',
-        source: SOURCE_ID,
-        minzoom: 8,
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-size': 11,
-          'text-offset': [0, 1.8],
-          'text-anchor': 'top',
-          'text-max-width': 10,
-          'text-allow-overlap': false,
-          'text-font': ['Noto Sans Bold'],
-        },
-        paint: {
-          'text-color': LABEL_COLORS[themeRef.current].text,
-          'text-halo-color': LABEL_COLORS[themeRef.current].halo,
-          'text-halo-width': 1,
-        },
-      });
-      applyBasemapTheme(map, themeRef.current);
+      addCompanyLayers(map);
       setIsLoaded(true);
-      // Logos load in the background so pins appear immediately.
-      void Promise.all(companiesRef.current.map((company) => registerLogo(company, map)));
     });
+
 
     // Keeps MapLibre quiet while a logo is still being prepared.
     map.on('styleimagemissing', (event) => {
