@@ -27,21 +27,24 @@ const ACTIVE_LAYER_ID = 'company-pins-active';
 const LABEL_LAYER_ID = 'company-labels';
 const NO_ACTIVE_PIN: maplibregl.FilterSpecification = ['==', ['get', 'id'], '__none__'];
 
+const MAPTILER_KEY = 'OXErs5ulKuJgqbESSXXz';
+/** Basemap per interface theme: the MapTiler "Base" flavours read well next to the sidebar. */
+const STYLE_URLS: Record<Theme, string> = {
+  light: `https://api.maptiler.com/maps/019bf1f1-a9e6-76b9-a536-7aac425452ca/style.json?key=${MAPTILER_KEY}`,
+  dark: `https://api.maptiler.com/maps/base-v4-dark/style.json?key=${MAPTILER_KEY}`,
+};
+
 /** Pin and label colours per theme, matching the interface tokens. */
 const PIN_COLORS: Record<Theme, { border: string; activeBorder: string; plate: string }> = {
   light: { border: '#FFFFFF', activeBorder: '#12618A', plate: '#FFFFFF' },
-  dark: { border: '#404040', activeBorder: '#5DB7E5', plate: '#F5F5F5' },
+  dark: { border: '#4A4A4A', activeBorder: '#5DB7E5', plate: '#F5F5F5' },
 };
 
 const LABEL_COLORS: Record<Theme, { text: string; halo: string }> = {
   light: { text: '#171717', halo: '#FFFFFF' },
-  dark: { text: '#FAFAFA', halo: '#171717' },
+  dark: { text: '#F5F5F5', halo: '#101010' },
 };
 
-const BASEMAP_LABEL_COLORS: Record<Theme, { text: string; halo: string }> = {
-  light: { text: '#303030', halo: '#F7F7F5' },
-  dark: { text: '#F2F2F2', halo: '#242424' },
-};
 
 const drawPin = (
   source: CanvasImageSource,
@@ -96,63 +99,6 @@ const setImage = (map: maplibregl.Map, id: string, data: ImageData) => {
   map.addImage(id, data, { pixelRatio: PIN_SCALE });
 };
 
-const ORIGINAL_PAINT = new WeakMap<maplibregl.Map, Map<string, unknown>>();
-const THEMEABLE_PAINT = ['background-color', 'fill-color', 'line-color', 'fill-extrusion-color'] as const;
-
-const toNeutralDarkColor = (value: string): string => {
-  const probe = document.createElement('canvas').getContext('2d');
-  if (!probe) return value;
-  probe.fillStyle = '#000000';
-  probe.fillStyle = value;
-  const parsed = probe.fillStyle as string;
-  const match = /^#([0-9a-f]{6})$/i.exec(parsed);
-  if (!match) return value;
-  const int = parseInt(match[1], 16);
-  const r = (int >> 16) & 255;
-  const g = (int >> 8) & 255;
-  const b = int & 255;
-  const lightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  // Keep geographic hierarchy while removing hue from non-interactive map surfaces.
-  const neutral = Math.round(30 + (1 - lightness) * 35);
-  const channel = neutral.toString(16).padStart(2, '0');
-  return `#${channel}${channel}${channel}`;
-};
-
-/** Recolours the basemap so it matches the light or dark interface. */
-const applyBasemapTheme = (map: maplibregl.Map, theme: Theme) => {
-  const style = map.getStyle();
-  if (!style?.layers) return;
-  let originals = ORIGINAL_PAINT.get(map);
-  if (!originals) {
-    originals = new Map();
-    ORIGINAL_PAINT.set(map, originals);
-  }
-
-  style.layers.forEach((layer) => {
-    if (layer.id.startsWith('company-')) return;
-    THEMEABLE_PAINT.forEach((property) => {
-      const paint = (layer as { paint?: Record<string, unknown> }).paint;
-      if (!paint || !(property in paint)) return;
-      const key = `${layer.id}::${property}`;
-      if (!originals.has(key)) originals.set(key, paint[property]);
-      const original = originals!.get(key);
-      if (typeof original !== 'string') return;
-      map.setPaintProperty(layer.id, property, theme === 'dark' ? toNeutralDarkColor(original) : original);
-    });
-
-    if (layer.type === 'symbol') {
-      const key = `${layer.id}::text-color`;
-      const paint = (layer as { paint?: Record<string, unknown> }).paint;
-       if (!paint || !('text-color' in paint)) return;
-       const haloKey = `${layer.id}::text-halo-color`;
-       if (!originals.has(key)) originals.set(key, paint['text-color']);
-       if (!originals.has(haloKey)) originals.set(haloKey, paint['text-halo-color']);
-       const labelPalette = BASEMAP_LABEL_COLORS[theme];
-       map.setPaintProperty(layer.id, 'text-color', labelPalette.text);
-       if ('text-halo-color' in paint) map.setPaintProperty(layer.id, 'text-halo-color', labelPalette.halo);
-    }
-  });
-};
 
 const loadImage = (url: string) => new Promise<HTMLImageElement>((resolve, reject) => {
   const image = new Image();
@@ -182,6 +128,8 @@ export const MapContainer = ({
   const { theme } = useTheme();
   const themeRef = useRef(theme);
   themeRef.current = theme;
+  const appliedThemeRef = useRef(theme);
+
 
   companiesRef.current = companies;
   selectionHandlerRef.current = onCompanySelect;
@@ -238,13 +186,63 @@ export const MapContainer = ({
     if (hover) setImage(map, `${imageId}-hover`, hover);
   };
 
+  /** (Re)creates the company source, pin layers and labels on top of the current basemap. */
+  const addCompanyLayers = (map: maplibregl.Map) => {
+    if (map.getSource(SOURCE_ID)) return;
+    map.addSource(SOURCE_ID, { type: 'geojson', data: buildFeatureCollection(companiesRef.current) });
+    map.addLayer({
+      id: PIN_LAYER_ID,
+      type: 'symbol',
+      source: SOURCE_ID,
+      layout: {
+        'icon-image': ['get', 'imageId'],
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 2, 0.4, 8, 0.6, 14, 0.8],
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+      },
+    });
+    // Hovered/selected pin renders on top with the darker border and a slight scale-up.
+    map.addLayer({
+      id: ACTIVE_LAYER_ID,
+      type: 'symbol',
+      source: SOURCE_ID,
+      filter: NO_ACTIVE_PIN,
+      layout: {
+        'icon-image': ['get', 'hoverImageId'],
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 2, 0.46, 8, 0.69, 14, 0.92],
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+      },
+    });
+    map.addLayer({
+      id: LABEL_LAYER_ID,
+      type: 'symbol',
+      source: SOURCE_ID,
+      minzoom: 8,
+      layout: {
+        'text-field': ['get', 'name'],
+        'text-size': 11,
+        'text-offset': [0, 1.8],
+        'text-anchor': 'top',
+        'text-max-width': 10,
+        'text-allow-overlap': false,
+        'text-font': ['Noto Sans Bold'],
+      },
+      paint: {
+        'text-color': LABEL_COLORS[themeRef.current].text,
+        'text-halo-color': LABEL_COLORS[themeRef.current].halo,
+        'text-halo-width': 1,
+      },
+    });
+    void Promise.all(companiesRef.current.map((company) => registerLogo(company, map)));
+  };
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: 'https://api.maptiler.com/maps/019bf1f1-a9e6-76b9-a536-7aac425452ca/style.json?key=OXErs5ulKuJgqbESSXXz',
+      style: STYLE_URLS[themeRef.current],
       center: viewCenter,
       zoom: viewZoom,
       minZoom: 2,
@@ -256,56 +254,10 @@ export const MapContainer = ({
     map.addControl(new maplibregl.NavigationControl(), 'bottom-right');
 
     map.on('load', () => {
-      map.addSource(SOURCE_ID, { type: 'geojson', data: buildFeatureCollection(companiesRef.current) });
-      map.addLayer({
-        id: PIN_LAYER_ID,
-        type: 'symbol',
-        source: SOURCE_ID,
-        layout: {
-          'icon-image': ['get', 'imageId'],
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 2, 0.4, 8, 0.6, 14, 0.8],
-          'icon-allow-overlap': true,
-          'icon-ignore-placement': true,
-        },
-      });
-      // Hovered/selected pin renders on top with the darker border and a slight scale-up.
-      map.addLayer({
-        id: ACTIVE_LAYER_ID,
-        type: 'symbol',
-        source: SOURCE_ID,
-        filter: NO_ACTIVE_PIN,
-        layout: {
-          'icon-image': ['get', 'hoverImageId'],
-          'icon-size': ['interpolate', ['linear'], ['zoom'], 2, 0.46, 8, 0.69, 14, 0.92],
-          'icon-allow-overlap': true,
-          'icon-ignore-placement': true,
-        },
-      });
-      map.addLayer({
-        id: LABEL_LAYER_ID,
-        type: 'symbol',
-        source: SOURCE_ID,
-        minzoom: 8,
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-size': 11,
-          'text-offset': [0, 1.8],
-          'text-anchor': 'top',
-          'text-max-width': 10,
-          'text-allow-overlap': false,
-          'text-font': ['Noto Sans Bold'],
-        },
-        paint: {
-          'text-color': LABEL_COLORS[themeRef.current].text,
-          'text-halo-color': LABEL_COLORS[themeRef.current].halo,
-          'text-halo-width': 1,
-        },
-      });
-      applyBasemapTheme(map, themeRef.current);
+      addCompanyLayers(map);
       setIsLoaded(true);
-      // Logos load in the background so pins appear immediately.
-      void Promise.all(companiesRef.current.map((company) => registerLogo(company, map)));
     });
+
 
     // Keeps MapLibre quiet while a logo is still being prepared.
     map.on('styleimagemissing', (event) => {
@@ -369,18 +321,21 @@ export const MapContainer = ({
     }
   }, [selectedCompany, isLoaded]);
 
-  // Re-skins the basemap, labels and pins whenever the interface theme changes.
+  // Swaps the basemap flavour (and redraws the pins) whenever the interface theme changes.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isLoaded) return;
+    if (appliedThemeRef.current === theme) return;
+    appliedThemeRef.current = theme;
 
-    applyBasemapTheme(map, theme);
-    if (map.getLayer(LABEL_LAYER_ID)) {
-      map.setPaintProperty(LABEL_LAYER_ID, 'text-color', LABEL_COLORS[theme].text);
-      map.setPaintProperty(LABEL_LAYER_ID, 'text-halo-color', LABEL_COLORS[theme].halo);
-    }
-    void Promise.all(companiesRef.current.map((company) => registerLogo(company, map)));
+    loadedLogosRef.current.clear();
+    map.setStyle(STYLE_URLS[theme]);
+    map.once('styledata', () => {
+      addCompanyLayers(map);
+      activePinUpdaterRef.current?.();
+    });
   }, [theme, isLoaded]);
+
 
   useEffect(() => {
     if (!mapRef.current || !isLoaded || selectedCompany) return;
