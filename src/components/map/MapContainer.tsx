@@ -319,18 +319,21 @@ export const MapContainer = ({
     }
   }, [selectedCompany, isLoaded]);
 
-  // Re-skins the basemap, labels and pins whenever the interface theme changes.
+  // Swaps the basemap flavour (and redraws the pins) whenever the interface theme changes.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isLoaded) return;
+    if (appliedThemeRef.current === theme) return;
+    appliedThemeRef.current = theme;
 
-    applyBasemapTheme(map, theme);
-    if (map.getLayer(LABEL_LAYER_ID)) {
-      map.setPaintProperty(LABEL_LAYER_ID, 'text-color', LABEL_COLORS[theme].text);
-      map.setPaintProperty(LABEL_LAYER_ID, 'text-halo-color', LABEL_COLORS[theme].halo);
-    }
-    void Promise.all(companiesRef.current.map((company) => registerLogo(company, map)));
+    loadedLogosRef.current.clear();
+    map.setStyle(STYLE_URLS[theme]);
+    map.once('styledata', () => {
+      addCompanyLayers(map);
+      activePinUpdaterRef.current?.();
+    });
   }, [theme, isLoaded]);
+
 
   useEffect(() => {
     if (!mapRef.current || !isLoaded || selectedCompany) return;
