@@ -38,9 +38,9 @@ export const SidebarHeader = ({
         )}
       >
         {/* Cover Image */}
-        <div className="relative h-32 rounded-lg overflow-hidden bg-primary/10">
+        <div className="relative h-32 overflow-hidden rounded-lg bg-muted">
           <div className="absolute inset-0 flex items-center justify-center">
-            <PixelIcon name="globe-americas" className="text-6xl text-primary/30" />
+            <PixelIcon name="globe-americas" className="text-6xl text-muted-foreground/60" />
           </div>
         </div>
 
