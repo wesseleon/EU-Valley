@@ -27,21 +27,24 @@ const ACTIVE_LAYER_ID = 'company-pins-active';
 const LABEL_LAYER_ID = 'company-labels';
 const NO_ACTIVE_PIN: maplibregl.FilterSpecification = ['==', ['get', 'id'], '__none__'];
 
+const MAPTILER_KEY = 'OXErs5ulKuJgqbESSXXz';
+/** Basemap per interface theme: the MapTiler "Base" flavours read well next to the sidebar. */
+const STYLE_URLS: Record<Theme, string> = {
+  light: `https://api.maptiler.com/maps/019bf1f1-a9e6-76b9-a536-7aac425452ca/style.json?key=${MAPTILER_KEY}`,
+  dark: `https://api.maptiler.com/maps/base-v4-dark/style.json?key=${MAPTILER_KEY}`,
+};
+
 /** Pin and label colours per theme, matching the interface tokens. */
 const PIN_COLORS: Record<Theme, { border: string; activeBorder: string; plate: string }> = {
   light: { border: '#FFFFFF', activeBorder: '#12618A', plate: '#FFFFFF' },
-  dark: { border: '#404040', activeBorder: '#5DB7E5', plate: '#F5F5F5' },
+  dark: { border: '#4A4A4A', activeBorder: '#5DB7E5', plate: '#F5F5F5' },
 };
 
 const LABEL_COLORS: Record<Theme, { text: string; halo: string }> = {
   light: { text: '#171717', halo: '#FFFFFF' },
-  dark: { text: '#FAFAFA', halo: '#171717' },
+  dark: { text: '#F5F5F5', halo: '#101010' },
 };
 
-const BASEMAP_LABEL_COLORS: Record<Theme, { text: string; halo: string }> = {
-  light: { text: '#303030', halo: '#F7F7F5' },
-  dark: { text: '#F2F2F2', halo: '#242424' },
-};
 
 const drawPin = (
   source: CanvasImageSource,
