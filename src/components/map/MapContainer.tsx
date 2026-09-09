@@ -99,63 +99,6 @@ const setImage = (map: maplibregl.Map, id: string, data: ImageData) => {
   map.addImage(id, data, { pixelRatio: PIN_SCALE });
 };
 
-const ORIGINAL_PAINT = new WeakMap<maplibregl.Map, Map<string, unknown>>();
-const THEMEABLE_PAINT = ['background-color', 'fill-color', 'line-color', 'fill-extrusion-color'] as const;
-
-const toNeutralDarkColor = (value: string): string => {
-  const probe = document.createElement('canvas').getContext('2d');
-  if (!probe) return value;
-  probe.fillStyle = '#000000';
-  probe.fillStyle = value;
-  const parsed = probe.fillStyle as string;
-  const match = /^#([0-9a-f]{6})$/i.exec(parsed);
-  if (!match) return value;
-  const int = parseInt(match[1], 16);
-  const r = (int >> 16) & 255;
-  const g = (int >> 8) & 255;
-  const b = int & 255;
-  const lightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  // Keep geographic hierarchy while removing hue from non-interactive map surfaces.
-  const neutral = Math.round(30 + (1 - lightness) * 35);
-  const channel = neutral.toString(16).padStart(2, '0');
-  return `#${channel}${channel}${channel}`;
-};
-
-/** Recolours the basemap so it matches the light or dark interface. */
-const applyBasemapTheme = (map: maplibregl.Map, theme: Theme) => {
-  const style = map.getStyle();
-  if (!style?.layers) return;
-  let originals = ORIGINAL_PAINT.get(map);
-  if (!originals) {
-    originals = new Map();
-    ORIGINAL_PAINT.set(map, originals);
-  }
-
-  style.layers.forEach((layer) => {
-    if (layer.id.startsWith('company-')) return;
-    THEMEABLE_PAINT.forEach((property) => {
-      const paint = (layer as { paint?: Record<string, unknown> }).paint;
-      if (!paint || !(property in paint)) return;
-      const key = `${layer.id}::${property}`;
-      if (!originals.has(key)) originals.set(key, paint[property]);
-      const original = originals!.get(key);
-      if (typeof original !== 'string') return;
-      map.setPaintProperty(layer.id, property, theme === 'dark' ? toNeutralDarkColor(original) : original);
-    });
-
-    if (layer.type === 'symbol') {
-      const key = `${layer.id}::text-color`;
-      const paint = (layer as { paint?: Record<string, unknown> }).paint;
-       if (!paint || !('text-color' in paint)) return;
-       const haloKey = `${layer.id}::text-halo-color`;
-       if (!originals.has(key)) originals.set(key, paint['text-color']);
-       if (!originals.has(haloKey)) originals.set(haloKey, paint['text-halo-color']);
-       const labelPalette = BASEMAP_LABEL_COLORS[theme];
-       map.setPaintProperty(layer.id, 'text-color', labelPalette.text);
-       if ('text-halo-color' in paint) map.setPaintProperty(layer.id, 'text-halo-color', labelPalette.halo);
-    }
-  });
-};
 
 const loadImage = (url: string) => new Promise<HTMLImageElement>((resolve, reject) => {
   const image = new Image();
