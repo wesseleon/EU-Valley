@@ -76,18 +76,25 @@ export const useCompanyStorage = () => {
     if (options?.throttle && Date.now() - lastFetchRef.current < MIN_REFRESH_GAP) return false;
     lastFetchRef.current = Date.now();
     const generation = writeGenerationRef.current;
-    const result = await fetchJson<CompanyData>(`/api/companies?t=${Date.now()}`, { cache: 'no-store' });
+    let readOnlyMirror = false;
+    let result = await fetchJson<CompanyData>(`/api/companies?t=${Date.now()}`, { cache: 'no-store' });
+
+    if (!result) {
+      // The preview does not run the serverless functions: read the live site's public data instead.
+      result = await fetchJson<CompanyData>(`${LIVE_API_ORIGIN}/api/companies?t=${Date.now()}`, { cache: 'no-store' });
+      readOnlyMirror = true;
+    }
 
     // A local edit happened while this read was in flight: the reply is stale.
     if (generation !== writeGenerationRef.current || isSavingRef.current) return false;
     if (!result) {
-      // No live backend (e.g. the preview): keep working with browser storage.
+      // No live backend at all: keep working with browser storage.
       localOnlyRef.current = true;
       setIsLocalOnly(true);
       return false;
     }
-    localOnlyRef.current = false;
-    setIsLocalOnly(false);
+    localOnlyRef.current = readOnlyMirror;
+    setIsLocalOnly(readOnlyMirror);
     const data = result.data;
     if (!result.ok || !data || !Array.isArray(data.companies) || !Array.isArray(data.hiddenIds)) return false;
     if (data.companies.length === 0 && !data.lastUpdated) return false;

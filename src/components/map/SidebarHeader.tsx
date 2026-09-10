@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { countries } from '@/data/companies';
 import { cn } from '@/lib/utils';
 import { PixelIcon } from '@/components/ui/PixelIcon';
-import coverAsset from '@/assets/europe.jpg.asset.json';
+import coverImage from '@/assets/europe.jpg';
 
 interface SidebarHeaderProps {
   searchQuery: string;
@@ -41,7 +41,7 @@ export const SidebarHeader = ({
         {/* Cover Image */}
         <div className="relative h-32 overflow-hidden rounded-lg bg-muted">
           <img
-            src={coverAsset.url}
+            src={coverImage}
             alt="EU Valley – innovative companies based in the EU, EFTA & CANZUK"
             className="absolute inset-0 h-full w-full object-cover"
             loading="lazy"
