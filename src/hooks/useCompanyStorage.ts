@@ -171,10 +171,15 @@ export const useCompanyStorage = () => {
 
   useEffect(() => {
     if (!isLoaded) return;
-    const interval = window.setInterval(() => void fetchFromApi(), SYNC_INTERVAL);
-    const refresh = () => void fetchFromApi();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void fetchFromApi({ throttle: true });
+    }, SYNC_INTERVAL);
+    const refresh = () => {
+      if (document.visibilityState === 'visible') void fetchFromApi({ throttle: true });
+    };
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);
+
     return () => {
       window.clearInterval(interval);
       window.removeEventListener('focus', refresh);
