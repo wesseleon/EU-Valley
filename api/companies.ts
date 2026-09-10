@@ -86,7 +86,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
+    cachedBlobUrl = null;
     console.error('Blob storage error:', error);
-    return res.status(500).json({ error: 'Failed to access storage' });
+    const message = error instanceof Error ? error.message : 'Failed to access storage';
+    return res.status(500).json({ error: `Storage error: ${message}` });
+
   }
 }
