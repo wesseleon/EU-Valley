@@ -4,6 +4,19 @@ import { hasValidAdminSession, isSameOriginRequest } from './_auth.js';
 
 const BLOB_FILENAME = 'companies.json';
 
+/**
+ * Resolving the blob URL costs a "list" (advanced) operation, so the result is cached
+ * per warm instance and only re-resolved after a write or when it is missing.
+ */
+let cachedBlobUrl: string | null = null;
+
+const resolveBlobUrl = async (): Promise<string | null> => {
+  if (cachedBlobUrl) return cachedBlobUrl;
+  const { blobs } = await list({ prefix: BLOB_FILENAME, limit: 1 });
+  cachedBlobUrl = blobs.find(b => b.pathname === BLOB_FILENAME)?.url ?? null;
+  return cachedBlobUrl;
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     return res.status(503).json({ error: 'Storage not configured' });
@@ -11,22 +24,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (req.method === 'GET') {
-      // Get companies from blob storage
-      const { blobs } = await list({ prefix: BLOB_FILENAME, limit: 1 });
-      const companiesBlob = blobs.find(b => b.pathname === BLOB_FILENAME);
-      
-      if (!companiesBlob) {
+      const blobUrl = await resolveBlobUrl();
+
+      if (!blobUrl) {
         res.setHeader('Cache-Control', 'no-store, max-age=0');
         return res.status(200).json({ companies: [], hiddenIds: [], lastUpdated: null, version: null });
       }
 
-      // Bypass the blob CDN cache so edits are visible immediately.
-      const response = await fetch(`${companiesBlob.url}?t=${Date.now()}`, { cache: 'no-store' });
+      // Reading the blob directly is a cheap operation; the CDN cache is bypassed so edits show up at once.
+      const response = await fetch(`${blobUrl}?t=${Date.now()}`, { cache: 'no-store' });
+      if (!response.ok) {
+        cachedBlobUrl = null;
+        return res.status(502).json({ error: 'Could not read stored data' });
+      }
       const data = await response.json();
-      
+
       res.setHeader('Cache-Control', 'no-store, max-age=0');
-      return res.status(200).json({ ...data, version: companiesBlob.uploadedAt.toISOString() });
+      return res.status(200).json({ ...data, version: data?.lastUpdated ?? null });
     }
+
 
     if (req.method === 'POST') {
       if (!isSameOriginRequest(req) || !hasValidAdminSession(req)) {
@@ -62,13 +78,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         allowOverwrite: true,
         contentType: 'application/json',
       });
+      cachedBlobUrl = result.url;
 
       return res.status(200).json({ success: true, lastUpdated: data.lastUpdated });
+
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
+    cachedBlobUrl = null;
     console.error('Blob storage error:', error);
-    return res.status(500).json({ error: 'Failed to access storage' });
+    const message = error instanceof Error ? error.message : 'Failed to access storage';
+    return res.status(500).json({ error: `Storage error: ${message}` });
+
   }
 }

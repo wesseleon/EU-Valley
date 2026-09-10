@@ -17,7 +17,11 @@ interface CompanyData {
 
 const STORAGE_KEY = 'eu-valley-companies-v2';
 const HIDDEN_KEY = 'eu-valley-hidden-v2';
-const SYNC_INTERVAL = 15_000;
+/** Background refresh cadence. Kept low-frequency so stored-data read operations stay cheap. */
+const SYNC_INTERVAL = 300_000;
+/** Manual/focus refreshes are throttled to avoid bursts of read operations. */
+const MIN_REFRESH_GAP = 60_000;
+
 
 const migrateDefaults = (): StoredCompany[] => {
   const timestamp = new Date().toISOString();
@@ -54,6 +58,9 @@ export const useCompanyStorage = () => {
   const latestKnownUpdateRef = useRef<number>(0);
   /** Incremented on every local write so replies from older reads are ignored. */
   const writeGenerationRef = useRef(0);
+  /** Timestamp of the last read, used to throttle background refreshes. */
+  const lastFetchRef = useRef(0);
+
 
   const applyLocalState = useCallback((companies: StoredCompany[], hidden: Set<string>) => {
     companiesRef.current = companies;
@@ -64,10 +71,13 @@ export const useCompanyStorage = () => {
     localStorage.setItem(HIDDEN_KEY, JSON.stringify(Array.from(hidden)));
   }, []);
 
-  const fetchFromApi = useCallback(async () => {
+  const fetchFromApi = useCallback(async (options?: { throttle?: boolean }) => {
     if (isSavingRef.current) return false;
+    if (options?.throttle && Date.now() - lastFetchRef.current < MIN_REFRESH_GAP) return false;
+    lastFetchRef.current = Date.now();
     const generation = writeGenerationRef.current;
     const result = await fetchJson<CompanyData>(`/api/companies?t=${Date.now()}`, { cache: 'no-store' });
+
     // A local edit happened while this read was in flight: the reply is stale.
     if (generation !== writeGenerationRef.current || isSavingRef.current) return false;
     if (!result) {
@@ -101,11 +111,18 @@ export const useCompanyStorage = () => {
     writeGenerationRef.current += 1;
     setIsSyncing(true);
     try {
-      const result = await fetchJson<{ lastUpdated?: string }>('/api/companies', {
+      const body = JSON.stringify({ companies, hiddenIds: Array.from(hidden) });
+      const send = () => fetchJson<{ lastUpdated?: string; error?: string }>('/api/companies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companies, hiddenIds: Array.from(hidden) }),
+        body,
       });
+      let result = await send();
+      // One retry: storage writes occasionally fail on a transient error.
+      if (result && !result.ok && result.status >= 500) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        result = await send();
+      }
       if (!result) {
         localOnlyRef.current = true;
         setIsLocalOnly(true);
@@ -113,8 +130,14 @@ export const useCompanyStorage = () => {
         return true;
       }
       if (!result.ok) {
-        throw new Error(result.status === 401 ? 'Your admin session has expired.' : 'Changes could not be saved.');
+        const detail = result.data?.error;
+        throw new Error(
+          result.status === 401
+            ? 'Your admin session has expired. Log in again to save.'
+            : detail || 'Changes could not be saved.',
+        );
       }
+
       const savedAt = result.data?.lastUpdated ? Date.parse(result.data.lastUpdated) : Date.now();
       latestKnownUpdateRef.current = Math.max(latestKnownUpdateRef.current, savedAt);
       setLastSyncTime(new Date(savedAt));
@@ -148,10 +171,15 @@ export const useCompanyStorage = () => {
 
   useEffect(() => {
     if (!isLoaded) return;
-    const interval = window.setInterval(() => void fetchFromApi(), SYNC_INTERVAL);
-    const refresh = () => void fetchFromApi();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void fetchFromApi({ throttle: true });
+    }, SYNC_INTERVAL);
+    const refresh = () => {
+      if (document.visibilityState === 'visible') void fetchFromApi({ throttle: true });
+    };
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', refresh);
+
     return () => {
       window.clearInterval(interval);
       window.removeEventListener('focus', refresh);
