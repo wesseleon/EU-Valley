@@ -71,10 +71,13 @@ export const useCompanyStorage = () => {
     localStorage.setItem(HIDDEN_KEY, JSON.stringify(Array.from(hidden)));
   }, []);
 
-  const fetchFromApi = useCallback(async () => {
+  const fetchFromApi = useCallback(async (options?: { throttle?: boolean }) => {
     if (isSavingRef.current) return false;
+    if (options?.throttle && Date.now() - lastFetchRef.current < MIN_REFRESH_GAP) return false;
+    lastFetchRef.current = Date.now();
     const generation = writeGenerationRef.current;
     const result = await fetchJson<CompanyData>(`/api/companies?t=${Date.now()}`, { cache: 'no-store' });
+
     // A local edit happened while this read was in flight: the reply is stale.
     if (generation !== writeGenerationRef.current || isSavingRef.current) return false;
     if (!result) {
