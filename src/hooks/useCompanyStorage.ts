@@ -111,11 +111,18 @@ export const useCompanyStorage = () => {
     writeGenerationRef.current += 1;
     setIsSyncing(true);
     try {
-      const result = await fetchJson<{ lastUpdated?: string }>('/api/companies', {
+      const body = JSON.stringify({ companies, hiddenIds: Array.from(hidden) });
+      const send = () => fetchJson<{ lastUpdated?: string; error?: string }>('/api/companies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ companies, hiddenIds: Array.from(hidden) }),
+        body,
       });
+      let result = await send();
+      // One retry: storage writes occasionally fail on a transient error.
+      if (result && !result.ok && result.status >= 500) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        result = await send();
+      }
       if (!result) {
         localOnlyRef.current = true;
         setIsLocalOnly(true);
@@ -123,8 +130,14 @@ export const useCompanyStorage = () => {
         return true;
       }
       if (!result.ok) {
-        throw new Error(result.status === 401 ? 'Your admin session has expired.' : 'Changes could not be saved.');
+        const detail = result.data?.error;
+        throw new Error(
+          result.status === 401
+            ? 'Your admin session has expired. Log in again to save.'
+            : detail || 'Changes could not be saved.',
+        );
       }
+
       const savedAt = result.data?.lastUpdated ? Date.parse(result.data.lastUpdated) : Date.now();
       latestKnownUpdateRef.current = Math.max(latestKnownUpdateRef.current, savedAt);
       setLastSyncTime(new Date(savedAt));
