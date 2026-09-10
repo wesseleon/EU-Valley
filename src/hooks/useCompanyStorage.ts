@@ -17,7 +17,11 @@ interface CompanyData {
 
 const STORAGE_KEY = 'eu-valley-companies-v2';
 const HIDDEN_KEY = 'eu-valley-hidden-v2';
-const SYNC_INTERVAL = 15_000;
+/** Background refresh cadence. Kept low-frequency so stored-data read operations stay cheap. */
+const SYNC_INTERVAL = 300_000;
+/** Manual/focus refreshes are throttled to avoid bursts of read operations. */
+const MIN_REFRESH_GAP = 60_000;
+
 
 const migrateDefaults = (): StoredCompany[] => {
   const timestamp = new Date().toISOString();
