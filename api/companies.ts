@@ -18,9 +18,19 @@ const resolveBlobUrl = async (): Promise<string | null> => {
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Reads are public data, so any origin (e.g. the Lovable preview) may read them.
+  // Writes stay locked to same-origin requests with a valid admin session.
+  if (req.method === 'GET' || req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  }
+  if (req.method === 'OPTIONS') return res.status(204).end();
+
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     return res.status(503).json({ error: 'Storage not configured' });
   }
+
 
   try {
     if (req.method === 'GET') {
