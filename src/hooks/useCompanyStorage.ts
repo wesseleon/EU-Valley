@@ -58,6 +58,9 @@ export const useCompanyStorage = () => {
   const latestKnownUpdateRef = useRef<number>(0);
   /** Incremented on every local write so replies from older reads are ignored. */
   const writeGenerationRef = useRef(0);
+  /** Timestamp of the last read, used to throttle background refreshes. */
+  const lastFetchRef = useRef(0);
+
 
   const applyLocalState = useCallback((companies: StoredCompany[], hidden: Set<string>) => {
     companiesRef.current = companies;
